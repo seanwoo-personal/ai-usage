@@ -57,3 +57,7 @@ Xcode 없이 Command Line Tools만으로 빌드됩니다.
 임시 서명 빌드를 받은 사람은 처음 실행할 때 **시스템 설정 > 개인정보 보호 및 보안 > 그래도 열기**를 눌러야 합니다. 이 과정 없이 배포하려면 Apple Developer Program의 Developer ID로 서명하고 공증하세요.
 
 로고 경로는 Simple Icons(CC0)에서 가져왔습니다. Claude, Anthropic, OpenAI, Codex는 각 회사의 상표입니다.
+
+## 라이선스
+
+[MIT](LICENSE) © 2026 Sean Woo
