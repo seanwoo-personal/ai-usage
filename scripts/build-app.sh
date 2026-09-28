@@ -60,8 +60,8 @@ echo "▸ Signing…"
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APPDIR"
 else
-  codesign --force --sign - "$APPDIR"
-  echo "  (ad-hoc signed — set SIGN_IDENTITY for a Developer ID build)"
+  codesign --force --options runtime --sign - "$APPDIR"   # hardened runtime even without a certificate
+  echo "  (ad-hoc signed with hardened runtime — set SIGN_IDENTITY for a Developer ID build)"
 fi
 codesign --verify --strict "$APPDIR"
 

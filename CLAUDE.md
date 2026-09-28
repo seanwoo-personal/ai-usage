@@ -19,9 +19,13 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
    `211646405+seanwoo-personal@users.noreply.github.com`(회사 메일이 공개 기록에 남지 않게). 바꾸지 않는다.
 6. **GitHub 릴리스**: 반드시 `dist/AI-Usage.zip`(버전 없는 이름)을 포함한다 — 설치 스크립트가
    `releases/latest/download/AI-Usage.zip`을 받기 때문. DMG도 함께 올린다.
+   이 저장소는 **릴리스 변경 불가(immutable releases)** 가 켜져 있어서, 발행한 뒤에는 파일 교체·태그 이동이 안 된다.
+   그래서 초안으로 올려 파일을 확인한 다음 발행한다. 잘못 발행했으면 고치지 말고 다음 patch 버전을 낸다.
    ```bash
-   gh release create v<버전> dist/AI-Usage.zip dist/AI-Usage-<버전>.dmg \
+   gh release create v<버전> dist/AI-Usage.zip dist/AI-Usage-<버전>.dmg --draft \
      --repo seanwoo-personal/ai-usage --title "AI Usage <버전>" --notes "<한국어 변경 사항>"
+   gh release view v<버전> --repo seanwoo-personal/ai-usage --json assets --jq '.assets[].name'   # 두 파일 확인
+   gh release edit v<버전> --repo seanwoo-personal/ai-usage --draft=false
    ```
 7. **실제 설치 확인**: GitHub에서 받는 한 줄 설치를 실행해 새 버전이 설치되는지 확인.
    ```bash
@@ -37,5 +41,8 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
   터미널에서 직접 실행해 표준 에러를 본다. `AIUSAGE_DEBUG_LOGIN=claude|codex`를 주면 시작하자마자 해당 로그인 창이 열린다.
 - 새 사용자 첫 실행 흉내: `open -n "/Applications/AI Usage.app" --args -onboarded NO -connectedClaude NO -connectedCodex NO -connection.claude none -connection.codex none`
   (실행 인자라 저장된 설정은 바뀌지 않는다. 테스트 후 인자 없이 다시 실행해 둔다.)
+- 서명 인증서가 없어 임시(ad-hoc) 서명이지만 강화된 런타임(`--options runtime`)은 켜져 있다. 빌드 후
+  `codesign -dvv "dist/AI Usage.app"`의 flags에 `runtime`이 있어야 한다.
+- main 브랜치는 강제 푸시·삭제가 막혀 있다(관리자 포함). 기록을 고쳐 쓰지 말고 새 커밋으로 고친다.
 - 서명 인증서가 없어 임시(ad-hoc) 서명이다. 배포는 한 줄 설치가 기본이고, DMG는 "그래도 열기" 절차가 필요하다.
 - 웹 로그인 팝업(Google 등)은 별도 창으로 열어야 한다. 로그인 창을 팝업 주소로 이동시키면 흰 화면에서 멈춘다.
