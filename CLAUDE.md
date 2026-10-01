@@ -13,18 +13,20 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
 3. **빌드**: `rm -rf .build && VERSION=<버전> ./scripts/build-app.sh`
    - 결과: `dist/AI Usage.app`, `dist/AI-Usage-<버전>.dmg`, `dist/AI-Usage-<버전>.zip`, `dist/AI-Usage.zip`
    - `.build`를 지우는 이유: 폴더를 옮기거나 경로가 바뀌면 이전 모듈 캐시 때문에 빌드가 깨진다.
-4. **로컬 설치 확인**: `AIUSAGE_ZIP_URL="file://$PWD/dist/AI-Usage.zip" bash scripts/install.sh`
-   → 앱이 열리고 메뉴 막대에 값이 나오는지 확인.
+4. **로컬 설치 확인**: 테스트 모드로 방금 빌드한 ZIP을 실제 위치에 설치해 본다.
+   `AIUSAGE_TEST_MODE=1 AIUSAGE_ZIP_URL="file://$PWD/dist/AI-Usage.zip" AIUSAGE_SHA256="$(awk '{print $1}' dist/AI-Usage.zip.sha256)" bash scripts/install.sh`
+   → 앱이 열리고 메뉴 막대에 값이 나오는지 확인. (`selftest.sh`가 설치 실패 상황은 격리된 폴더에서 따로 검사한다.)
 5. **커밋·푸시**: 커밋 메시지는 한국어, 끝에 `Co-Authored-By` 줄. 이 저장소의 git 이메일은
    `211646405+seanwoo-personal@users.noreply.github.com`(회사 메일이 공개 기록에 남지 않게). 바꾸지 않는다.
-6. **GitHub 릴리스**: 반드시 `dist/AI-Usage.zip`(버전 없는 이름)을 포함한다 — 설치 스크립트가
-   `releases/latest/download/AI-Usage.zip`을 받기 때문. DMG도 함께 올린다.
+6. **GitHub 릴리스**: 반드시 `dist/AI-Usage.zip`과 `dist/AI-Usage.zip.sha256`을 함께 올린다. 설치 스크립트와 앱의
+   자동 업데이트가 `releases/download/<태그>/` 에서 이 두 파일을 받아 해시를 확인하기 때문. 앱 버전과 태그(vX.Y.Z)가
+   다르면 설치가 거부된다. DMG도 함께 올린다.
    이 저장소는 **릴리스 변경 불가(immutable releases)** 가 켜져 있어서, 발행한 뒤에는 파일 교체·태그 이동이 안 된다.
    그래서 초안으로 올려 파일을 확인한 다음 발행한다. 잘못 발행했으면 고치지 말고 다음 patch 버전을 낸다.
    ```bash
-   gh release create v<버전> dist/AI-Usage.zip dist/AI-Usage-<버전>.dmg --draft \
+   gh release create v<버전> dist/AI-Usage.zip dist/AI-Usage.zip.sha256 dist/AI-Usage-<버전>.dmg --draft \
      --repo seanwoo-personal/ai-usage --title "AI Usage <버전>" --notes "<한국어 변경 사항>"
-   gh release view v<버전> --repo seanwoo-personal/ai-usage --json assets --jq '.assets[].name'   # 두 파일 확인
+   gh release view v<버전> --repo seanwoo-personal/ai-usage --json assets --jq '.assets[].name'   # 세 파일 확인
    gh release edit v<버전> --repo seanwoo-personal/ai-usage --draft=false
    ```
 7. **실제 설치 확인**: GitHub에서 받는 한 줄 설치를 실행해 새 버전이 설치되는지 확인.
@@ -49,3 +51,6 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
   빌드 폴더·DMG·임시 폴더에서 켜면 그 경로가 로그인 항목에 남아 깨지기 때문. 테스트할 땐 설치본에서 켠다.
 - 서명 인증서가 없어 임시(ad-hoc) 서명이다. 배포는 한 줄 설치가 기본이고, DMG는 "그래도 열기" 절차가 필요하다.
 - 웹 로그인 팝업(Google 등)은 별도 창으로 열어야 한다. 로그인 창을 팝업 주소로 이동시키면 흰 화면에서 멈춘다.
+- 테스트는 실제 키체인·`~/.codex`·사용자 설정을 읽지 않는다(가짜 백엔드·가짜 시계·임시 폴더·`AppSettings.forTesting()`).
+  위험한 입력은 `Tests/regression.swift`의 probe로 별도 프로세스에서 돌린다. 테스트를 추가할 때도 이 원칙을 지킨다.
+- 앱의 자동 업데이트는 앱 안에 들어 있는 `install.sh`(빌드 때 복사됨)를 `AIUSAGE_VERSION=<태그>`로 실행한다.

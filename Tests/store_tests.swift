@@ -1,0 +1,389 @@
+// Store concurrency and retry tests with a fake backend, fake clock and fake scheduler.
+// No network, Keychain, login windows or real waiting.
+import AppKit
+
+@MainActor
+final class FakeBackend: UsageBackend {
+    final class Call {
+        let p: Provider, connection: Connection, interactive: Bool
+        var cont: CheckedContinuation<ProviderSnapshot, Error>?
+        init(_ p: Provider, _ c: Connection, _ i: Bool) { self.p = p; connection = c; interactive = i }
+    }
+    var calls: [Call] = []
+    var logins: [(Provider, (Bool) -> Void)] = []
+    var dismissed: [Provider] = []
+    var forgotten: [(Provider, Connection)] = []
+    var sharedCleared: [Bool] = []
+    var holdForget = false
+    private var forgetWaiters: [CheckedContinuation<Void, Never>] = []
+
+    var pending: [Call] { calls.filter { $0.cont != nil } }
+
+    func fetch(_ p: Provider, via connection: Connection, interactive: Bool) async throws -> ProviderSnapshot {
+        let call = Call(p, connection, interactive)
+        calls.append(call)
+        return try await withCheckedThrowingContinuation { call.cont = $0 }
+    }
+    func presentLogin(_ p: Provider, done: @escaping @MainActor (Bool) -> Void) { logins.append((p, done)) }
+    func dismissLogin(_ p: Provider) { dismissed.append(p) }
+    func forgetAppData(_ p: Provider, connection: Connection, clearSharedSignIn: Bool) async {
+        forgotten.append((p, connection))
+        sharedCleared.append(clearSharedSignIn)
+        if holdForget { await withCheckedContinuation { forgetWaiters.append($0) } }
+    }
+    func releaseForget() { forgetWaiters.forEach { $0.resume() }; forgetWaiters = [] }
+    func openTerminalLogin(_ p: Provider) {}
+    func isCLISetUp(_ p: Provider) -> Bool { true }
+
+    func succeed(_ call: Call, used: Double, at: Date) {
+        let w = UsageWindow(kind: .weekly, usedPercent: used, resetsAt: at.addingTimeInterval(86_400), windowMinutes: 10_080)
+        call.cont?.resume(returning: ProviderSnapshot(provider: call.p, windows: [w], plan: nil, source: .live, fetchedAt: at))
+        call.cont = nil
+    }
+    func fail(_ call: Call, _ e: ProviderError) { call.cont?.resume(throwing: e); call.cont = nil }
+    /// Resolve everything still open so no continuation leaks at the end of a test.
+    func drain() { for c in calls where c.cont != nil { fail(c, ProviderError(message: "drained")) } }
+}
+
+@MainActor
+final class FakeTime {
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+    struct Job { let due: Date; let action: @MainActor () -> Void; var cancelled = false }
+    var jobs: [Job] = []
+    lazy var scheduler: Scheduler = { [unowned self] delay, action in
+        let i = self.jobs.count
+        self.jobs.append(Job(due: self.now.addingTimeInterval(delay), action: action))
+        return { [unowned self] in self.jobs[i].cancelled = true }
+    }
+    /// Moves the clock and runs every job that has become due, exactly once.
+    func advance(_ seconds: TimeInterval) {
+        now = now.addingTimeInterval(seconds)
+        for i in jobs.indices where !jobs[i].cancelled && jobs[i].due <= now {
+            jobs[i].cancelled = true
+            jobs[i].action()
+        }
+    }
+}
+
+enum StoreTests {
+    /// Lets queued main-actor work run. Deterministic: only yields, never sleeps.
+    @MainActor static func settle() async { for _ in 0..<200 { await Task.yield() } }
+
+    /// Yields until `condition` holds (or a generous yield budget runs out).
+    @MainActor static func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
+        for _ in 0..<5_000 { if condition() { return true }; await Task.yield() }
+        return condition()
+    }
+
+    @MainActor static func make(_ connections: [Provider: Connection] = [.claude: .cli])
+        -> (UsageStore, FakeBackend, FakeTime, AppSettings) {
+        let s = AppSettings.forTesting()
+        for (p, c) in connections { s.connections[p] = c }
+        let b = FakeBackend(), t = FakeTime()
+        let st = UsageStore(settings: s, backend: b, clock: { t.now }, schedule: t.scheduler)
+        return (st, b, t, s)
+    }
+
+    @MainActor static func used(_ st: UsageStore, _ p: Provider = .claude) -> Double? {
+        st.entries[p]?.snapshot?.windows.first?.usedPercent
+    }
+
+    @MainActor static func run() async {
+        print("Store: duplicate requests")
+        do {
+            let (st, b, t, _) = make()
+            st.refresh(.claude)                    // normal
+            st.refresh(.claude, manual: true)      // manual button
+            st.refreshAll()                        // timer
+            st.refreshIfStale()                    // menu opened
+            st.refreshAll()                        // wake from sleep
+            await settle()
+            check(b.calls.count == 1, "five triggers at once → one request (got \(b.calls.count))")
+            if b.calls.count >= 2 {   // the bug: two in flight; answer them out of order
+                b.succeed(b.calls[1], used: 80, at: t.now); await settle()
+                b.succeed(b.calls[0], used: 10, at: t.now); await settle()
+            } else {
+                b.succeed(b.calls[0], used: 80, at: t.now); await settle()
+            }
+            check(used(st) == 80, "final value is the newest answer, not a late older one (got \(used(st).map { "\($0)" } ?? "nil"))")
+            b.drain()
+        }
+
+        print("Store: disconnect and reconnect")
+        do {
+            let (st, b, t, s) = make()
+            st.refresh(.claude); await settle()
+            st.disconnect(.claude); await settle()
+            st.useCLI(.claude); await settle()       // same connection kind again
+            check(s.connection(.claude) == .cli, "reconnected")
+            let newest = b.calls.last!
+            b.succeed(newest, used: 80, at: t.now); await settle()
+            b.succeed(b.calls[0], used: 10, at: t.now); await settle()   // answer from before the disconnect
+            check(used(st) == 80, "an answer from before the disconnect is ignored (got \(used(st).map { "\($0)" } ?? "nil"))")
+            check(b.forgotten.contains { $0.0 == .claude && $0.1 == .cli }, "disconnect drops the app's cached Claude token")
+            b.drain()
+        }
+        do {
+            let (st, b, t, _) = make()
+            st.refresh(.claude); await settle()
+            st.disconnect(.claude); st.useCLI(.claude); await settle()
+            b.succeed(b.calls.last!, used: 80, at: t.now); await settle()
+            b.fail(b.calls[0], ProviderError(message: "old", kind: .network)); await settle()
+            check(st.entries[.claude]?.error == nil && used(st) == 80, "a late failure from before the disconnect is ignored")
+            b.drain()
+        }
+        do {
+            let (st, b, _, s) = make()
+            st.refresh(.claude); await settle()
+            st.disconnect(.claude); await settle()
+            check(s.connection(.claude) == .none && st.entries[.claude] == nil, "disconnect clears the card")
+            let before = b.calls.count
+            st.refreshAll(); st.refresh(.claude, manual: true); await settle()
+            check(b.calls.count == before, "no request after disconnect")
+            b.drain()
+        }
+
+        print("Store: web login window")
+        do {
+            let (st, b, _, s) = make([:])
+            st.logInOnWeb(.claude); await settle()
+            b.logins.last?.1(false); await settle()
+            check(s.connection(.claude) == .none && st.loggingIn.isEmpty && b.calls.isEmpty, "closing the login window changes nothing")
+        }
+        do {
+            let (st, b, _, s) = make()
+            st.logInOnWeb(.claude); await settle()
+            st.disconnect(.claude); await settle()
+            let before = b.calls.count
+            b.logins.last?.1(true); await settle()    // the old window reports success late
+            check(s.connection(.claude) == .none, "a login that finishes after disconnect doesn't reconnect (got \(s.connection(.claude)))")
+            check(b.calls.count == before, "…and starts no request")
+            check(b.dismissed.contains(.claude), "disconnect closes the open login window")
+            b.drain()
+        }
+        do {
+            let (st, b, _, _) = make([.claude: .web])
+            b.holdForget = true
+            st.disconnect(.claude); await settle()
+            st.logInOnWeb(.claude); await settle()
+            check(b.logins.isEmpty, "a new login waits until the old login data is erased")
+            b.releaseForget()
+            check(await eventually { b.logins.count == 1 }, "…then opens")
+            b.drain()
+        }
+
+        print("Store: what a disconnect erases")
+        do {
+            let (st, b, _, _) = make([.claude: .web, .codex: .web])
+            st.disconnect(.claude); await settle()
+            check(b.sharedCleared.last == false, "Codex still uses web login → Google/Apple sign-in kept")
+            st.disconnect(.codex); await settle()
+            check(b.sharedCleared.last == true, "no web login left → shared sign-in data erased too")
+            let (st2, b2, _, _) = make([.claude: .cli, .codex: .web])
+            st2.disconnect(.claude); await settle()
+            check(b2.sharedCleared.last == false && b2.forgotten.last?.1 == .cli, "CLI disconnect erases only the app's token cache")
+            b.drain(); b2.drain()
+        }
+
+        print("Store: request timeout")
+        do {
+            let (st, b, t, _) = make()
+            st.refresh(.claude); await settle()
+            t.advance(UsageStore.requestTimeout + 1); await settle()
+            check(st.entries[.claude]?.loading == false && st.entries[.claude]?.error?.kind == .network, "a request that never answers times out")
+            st.refresh(.claude, manual: true); await settle()
+            check(b.calls.count == 2, "a new request can start after the timeout")
+            b.succeed(b.calls[1], used: 70, at: t.now); await settle()
+            b.succeed(b.calls[0], used: 10, at: t.now); await settle()
+            check(used(st) == 70, "the timed-out request's late answer is ignored")
+            b.drain()
+        }
+
+        print("Store: server retry wait (429)")
+        do {
+            let (st, b, t, _) = make()
+            st.refresh(.claude); await settle()
+            let until = t.now.addingTimeInterval(300)
+            b.fail(b.calls[0], ProviderError(message: "429", kind: .rateLimited, retryAt: until)); await settle()
+            st.refreshIfStale(); st.refreshAll(); st.refresh(.claude, manual: true); st.useCLI(.claude); await settle()
+            check(b.calls.count == 1, "menu, timer, button and reconnect don't bypass the wait (got \(b.calls.count) requests)")
+            t.advance(299); await settle()
+            check(b.calls.count == 1, "nothing one second before the allowed time")
+            t.advance(1); await settle()
+            check(b.calls.count == 2, "exactly one retry at the allowed time (got \(b.calls.count))")
+            check(st.entries[.claude]?.error?.retryAt == until, "the card keeps the wait-until time while waiting")
+            b.drain()
+        }
+        do {
+            let (st, b, _, _) = make()
+            st.refresh(.claude); await settle()
+            b.fail(b.calls[0], ProviderError(message: "offline", kind: .network)); await settle()
+            st.refresh(.claude, manual: true); await settle()
+            check(b.calls.count == 2, "after a network error the button can retry right away")
+            b.drain()
+        }
+
+        print("Retry-After parsing")
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        check(RetryPolicy.retryAt(header: "120", now: t0) == t0.addingTimeInterval(120), "seconds")
+        check(RetryPolicy.retryAt(header: nil, now: t0) == t0.addingTimeInterval(RetryPolicy.defaultWait), "missing → default wait")
+        check(RetryPolicy.retryAt(header: "soon", now: t0) == t0.addingTimeInterval(RetryPolicy.defaultWait), "garbage → default wait")
+        check(RetryPolicy.retryAt(header: "0", now: t0) == t0.addingTimeInterval(RetryPolicy.minimumWait), "0 → minimum wait")
+        check(RetryPolicy.retryAt(header: "-5", now: t0) == t0.addingTimeInterval(RetryPolicy.defaultWait), "negative → default wait")
+        check(RetryPolicy.retryAt(header: "99999999", now: t0) == t0.addingTimeInterval(RetryPolicy.maximumWait), "huge → capped")
+        let httpDate = "Fri, 15 Jan 2027 08:05:00 GMT"
+        let parsed = RetryPolicy.retryAt(header: httpDate, now: Date(timeIntervalSince1970: 1_799_999_000))
+        check(parsed.timeIntervalSince(Date(timeIntervalSince1970: 1_799_999_000)) <= RetryPolicy.maximumWait, "HTTP date is accepted and capped")
+        let near = RetryPolicy.retryAt(header: "Fri, 15 Jan 2027 08:07:00 GMT", now: RetryPolicy.httpDate("Fri, 15 Jan 2027 08:05:00 GMT")!)
+        check(near == RetryPolicy.httpDate("Fri, 15 Jan 2027 08:07:00 GMT"), "HTTP date two minutes ahead → that time")
+
+        print("Store: shuffled operation orders (fixed seeds)")
+        await shuffled()
+    }
+
+    /// Random interleavings of triggers, answers, failures, disconnects and reconnects.
+    /// Invariants: never more than one live request; nothing shown after disconnect; the value shown
+    /// always comes from the newest answered request of the current connection.
+    @MainActor static func shuffled() async {
+        var violations: [String] = []
+        for seed in 1...150 {
+            var rng = SeededRNG(seed: UInt64(seed))
+            let (st, b, t, s) = make()
+            var connectedAt = 0          // index in b.calls where the current connection's requests begin
+            var newestShown = -1
+            for step in 0..<30 {
+                switch rng.next() % 7 {
+                case 0: st.refresh(.claude)
+                case 1: st.refresh(.claude, manual: true)
+                case 2: st.refreshAll()
+                case 3, 4:
+                    let open = b.calls.indices.filter { b.calls[$0].cont != nil }
+                    if let i = open.randomElement(using: &rng) {
+                        if rng.next() % 3 == 0 { b.fail(b.calls[i], ProviderError(message: "x", kind: .generic)) }
+                        else { b.succeed(b.calls[i], used: Double(i), at: t.now) }
+                    }
+                case 5: st.disconnect(.claude)
+                default: if !s.isConnected(.claude) { st.useCLI(.claude); connectedAt = b.calls.count }
+                }
+                await settle()
+                let liveOpen = b.calls.indices.filter { $0 >= connectedAt && b.calls[$0].cont != nil }.count
+                if s.isConnected(.claude) && liveOpen > 1 { violations.append("seed \(seed) step \(step): \(liveOpen) live requests") }
+                if !s.isConnected(.claude) && st.entries[.claude] != nil { violations.append("seed \(seed) step \(step): data shown while disconnected") }
+                if let u = used(st) {
+                    let idx = Int(u)
+                    if idx < connectedAt { violations.append("seed \(seed) step \(step): shows an answer from before the reconnect") }
+                    if idx < newestShown { violations.append("seed \(seed) step \(step): went back to an older answer") }
+                    newestShown = max(newestShown, idx)
+                } else { newestShown = s.isConnected(.claude) ? newestShown : -1 }
+                if !s.isConnected(.claude) { newestShown = -1 }
+            }
+            b.drain(); await settle()
+        }
+        check(violations.isEmpty, "150 seeds × 30 steps: no stale value, no double request, nothing after disconnect"
+              + (violations.isEmpty ? "" : " — first: \(violations[0]) (\(violations.count) total)"))
+    }
+}
+
+/// Small deterministic PRNG so every run explores the same interleavings.
+struct SeededRNG: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { state = seed &* 0x9E3779B97F4A7C15 | 1 }
+    mutating func next() -> UInt64 {
+        state ^= state << 13; state ^= state >> 7; state ^= state << 17
+        return state
+    }
+}
+
+enum CredentialTests {
+    /// A fake Claude Code login store. Tokens here are made-up strings, never real ones.
+    final class FakeLogin {
+        var version: Date? = Date(timeIntervalSince1970: 1_800_000_000)
+        var token = "fake-token-A"
+        var readable = true
+        var reads = 0
+        var source: ClaudeProvider.CredentialSource {
+            ClaudeProvider.CredentialSource(
+                version: { [unowned self] in self.version },
+                readSecret: { [unowned self] _ in
+                    self.reads += 1
+                    guard self.readable else { return (nil, errSecInteractionNotAllowed) }
+                    let json = #"{"claudeAiOauth":{"accessToken":"\#(self.token)","expiresAt":4102444700000}}"#
+                    return (Data(json.utf8), errSecSuccess)
+                },
+                fileDate: { nil }, readFile: { nil })
+        }
+    }
+
+    static func run() {
+        print("Claude CLI login cache")
+        let login = FakeLogin()
+        let provider = ClaudeProvider(source: login.source)
+        check((try? provider.tokenForTesting()) == "fake-token-A", "reads the current login")
+        _ = try? provider.tokenForTesting()
+        check(login.reads == 1, "unchanged login → cached, not read again")
+        login.version = login.version!.addingTimeInterval(60); login.token = "fake-token-B"
+        check((try? provider.tokenForTesting()) == "fake-token-B", "Claude Code switched account → the new account is used at once")
+        login.version = login.version!.addingTimeInterval(60); login.token = "fake-token-C"; login.readable = false
+        var kind: ProviderError.Kind?
+        do { _ = try provider.tokenForTesting() } catch let e as ProviderError { kind = e.kind } catch {}
+        check(kind == .needsApproval, "changed login that can't be read → asks for approval, never falls back to the old token")
+        login.readable = true
+        provider.resetCache()
+        let before = login.reads
+        _ = try? provider.tokenForTesting()
+        check(login.reads == before + 1, "disconnect clears the app's cache (next check reads again)")
+        login.version = nil
+        var missing: ProviderError.Kind?
+        do { _ = try provider.tokenForTesting() } catch let e as ProviderError { missing = e.kind } catch {}
+        check(missing == .cliMissing, "logged out of Claude Code → not shown with the old token")
+    }
+}
+
+enum OriginTests {
+    static func run() {
+        print("Login and usage-check address rules")
+        func off(_ s: String, _ p: Provider = .codex) -> Bool { WebOrigin.isOfficial(URL(string: s), for: p) }
+        check(off("https://chatgpt.com/"), "https://chatgpt.com → official")
+        check(off("https://chatgpt.com/auth/login?next=/"), "path and query are fine")
+        check(off("https://CHATGPT.com/"), "host is case-insensitive")
+        check(off("https://claude.ai/new", .claude), "https://claude.ai → official for Claude")
+        check(!off("https://claude.ai/", .codex), "the other service's host isn't official for this one")
+        check(!off("https://evilchatgpt.com/"), "look-alike suffix (evilchatgpt.com) → refused")
+        check(!off("https://chatgpt.com.evil.com/"), "look-alike prefix → refused")
+        check(!off("https://sub.chatgpt.com/"), "subdomain → refused (not needed for usage)")
+        check(!off("http://chatgpt.com/"), "plain http → refused")
+        check(!off("https://chatgpt.com:8443/"), "non-standard port → refused")
+        check(off("https://chatgpt.com:443/"), "explicit 443 → official")
+        check(!off("https://user:pass@chatgpt.com/"), "URL with user info → refused")
+        check(!off("file:///etc/hosts"), "file: → refused")
+        check(!off("javascript:alert(1)"), "javascript: → refused")
+        check(!off("data:text/html,hi"), "data: → refused")
+        check(!WebOrigin.isOfficial(nil, for: .codex), "no URL → refused")
+        func kind(_ s: String) -> WebOrigin.Kind { WebOrigin.classify(URL(string: s), for: .codex) }
+        check(kind("https://accounts.google.com/o/oauth2/v2/auth") == .identityProvider, "Google sign-in page → named as sign-in step")
+        check(kind("https://appleid.apple.com/auth/authorize") == .identityProvider, "Apple sign-in page → named as sign-in step")
+        check(kind("https://auth.openai.com/log-in") == .identityProvider, "OpenAI auth page → named as sign-in step")
+        check(kind("https://accounts.google.com.evil.com/") == .unknown, "look-alike of a sign-in provider → warning")
+        check(kind("http://accounts.google.com/") == .insecure, "http sign-in page → warning")
+        check(kind("https://example.com/") == .unknown, "any other site → warning")
+    }
+}
+
+enum UpdaterTests {
+    static func run() {
+        print("Updater: versions and release info")
+        check(Updater.isNewer("1.2.0", than: "1.1.2"), "1.2.0 > 1.1.2")
+        check(Updater.isNewer("1.10.0", than: "1.9.9"), "1.10.0 > 1.9.9 (numeric, not text)")
+        check(!Updater.isNewer("1.1.2", than: "1.1.2"), "same version is not newer")
+        check(!Updater.isNewer("1.1.1", than: "1.1.2"), "older is not newer")
+        check(Updater.isNewer("2.0", than: "1.9.9"), "missing parts count as 0")
+        func rel(_ json: String) -> Updater.Release? { Updater.parseRelease(Data(json.utf8)) }
+        let ok = rel(#"{"tag_name":"v1.2.0","draft":false,"prerelease":false,"html_url":"https://github.com/seanwoo-personal/ai-usage/releases/tag/v1.2.0"}"#)
+        check(ok?.version == "1.2.0" && ok?.tag == "v1.2.0", "published release is read")
+        check(rel(#"{"tag_name":"v1.2.0","draft":true,"html_url":"https://github.com/x"}"#) == nil, "draft is ignored")
+        check(rel(#"{"tag_name":"v1.2.0","prerelease":true,"html_url":"https://github.com/x"}"#) == nil, "pre-release is ignored")
+        check(rel(#"{"tag_name":"1.2.0;rm -rf","html_url":"https://github.com/x"}"#) == nil, "malformed tag is ignored")
+        check(rel(#"{"tag_name":"v1.2.0","html_url":"https://evil.example/x"}"#) == nil, "release page not on github.com is ignored")
+        check(rel("not json") == nil, "garbage is ignored")
+    }
+}

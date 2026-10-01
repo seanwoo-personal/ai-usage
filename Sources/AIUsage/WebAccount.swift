@@ -2,6 +2,41 @@ import AppKit
 import SwiftUI
 import WebKit
 
+/// Which pages count as the service itself. Checked before deciding "logged in" and before
+/// running the usage script, so a look-alike host, plain http, another port or a URL with user
+/// info is never trusted.
+enum WebOrigin {
+    static func host(for p: Provider) -> String { p == .claude ? "claude.ai" : "chatgpt.com" }
+
+    /// Sign-in providers these sites hand off to. Used only to word the login window's notice
+    /// (navigation to them is allowed, as in any browser); they are never trusted for usage checks.
+    static let identityProviders: Set<String> = ["accounts.google.com", "appleid.apple.com", "auth.openai.com",
+                                                "login.microsoftonline.com", "login.live.com"]
+
+    enum Kind: Equatable { case official, identityProvider, unknown, insecure }
+
+    private static func parts(_ url: URL?) -> (scheme: String, host: String)? {
+        guard let url, let c = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = c.scheme?.lowercased(), let host = c.host?.lowercased(), !host.isEmpty,
+              c.user == nil, c.password == nil else { return nil }
+        if let port = c.port, port != (scheme == "https" ? 443 : 80) { return nil }
+        return (scheme, host)
+    }
+
+    /// Exactly https://claude.ai or https://chatgpt.com (default port, no user info).
+    static func isOfficial(_ url: URL?, for p: Provider) -> Bool {
+        guard let (scheme, host) = parts(url) else { return false }
+        return scheme == "https" && host == Self.host(for: p)
+    }
+
+    static func classify(_ url: URL?, for p: Provider) -> Kind {
+        if isOfficial(url, for: p) { return .official }
+        guard let (scheme, host) = parts(url) else { return .unknown }
+        guard scheme == "https" else { return .insecure }
+        return identityProviders.contains(host) ? .identityProvider : .unknown
+    }
+}
+
 /// A claude.ai / chatgpt.com login kept inside the app (WebKit's own website data store).
 /// Usage is fetched from within a page on that site, so cookies and tokens never pass through our code.
 @MainActor
@@ -10,6 +45,9 @@ final class WebAccount: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
     private var loadedAt: Date?
     private var loadWaiters: [CheckedContinuation<Void, Error>] = []
+    /// The page load the waiters belong to. Callbacks for any other load (an earlier page,
+    /// a discarded web view) are ignored.
+    private var pendingNavigation: ObjectIdentifier?
 
     /// Plain Safari user agent: some sign-in pages (e.g. Google) refuse embedded browsers otherwise.
     static let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
@@ -50,7 +88,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
             throw ProviderError(message: L.t(
                 "이 계정에서 사용량 정보를 찾지 못했어요. 구독 중인 계정으로 로그인했는지 확인해 주세요.",
                 "No usage information for this account. Check that you logged in with your subscribed account."), kind: .noLimits)
-        case 429: throw ProviderError.rateLimited
+        case 429: throw ProviderError.rateLimited(until: RetryPolicy.retryAt(header: result["retryAfter"] as? String, now: Date()))
         default: throw ProviderError.server(status)
         }
 
@@ -74,16 +112,19 @@ final class WebAccount: NSObject, WKNavigationDelegate {
         let js = provider == .claude
             ? "const r = await fetch('/api/organizations', {credentials: 'include'}); if (!r.ok) return false; const o = await r.json(); return Array.isArray(o) && o.length > 0;"
             : "const r = await fetch('/api/auth/session', {credentials: 'include'}); if (!r.ok) return false; const s = await r.json(); return !!(s && s.accessToken);"
-        guard let wv = try? await anchor() else { return false }
+        guard let wv = try? await anchor(), WebOrigin.isOfficial(wv.url, for: provider) else { return false }
         return ((try? await wv.callAsyncJavaScript(js, contentWorld: .defaultClient)) as? Bool) ?? false
     }
 
-    /// Forgets this site's login (cookies, storage) from the app.
-    func logOut() async {
-        webView = nil
-        loadedAt = nil
+    /// Sign-in providers' data is shared by both services, so it's erased only on request.
+    static let sharedSignInDomains = ["google.com", "apple.com", "live.com", "microsoftonline.com", "microsoft.com"]
+
+    /// Forgets this site's login (cookies, storage) from the app; the other service's is kept.
+    func logOut(clearSharedSignIn: Bool = false) async {
+        discardWebView(URLError(.cancelled))
         let store = WKWebsiteDataStore.default()
-        let domains = provider == .claude ? ["claude.ai", "anthropic.com"] : ["chatgpt.com", "openai.com"]
+        var domains = provider == .claude ? ["claude.ai", "anthropic.com"] : ["chatgpt.com", "openai.com"]
+        if clearSharedSignIn { domains += Self.sharedSignInDomains }
         let records = await store.dataRecords(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes())
         let mine = records.filter { r in domains.contains { r.displayName.hasSuffix($0) } }
         await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), for: mine)
@@ -93,13 +134,21 @@ final class WebAccount: NSObject, WKNavigationDelegate {
 
     private func run(_ js: String) async throws -> [String: Any] {
         let wv = try await anchor()
+        guard WebOrigin.isOfficial(wv.url, for: provider) else {
+            discardWebView(URLError(.cancelled))
+            throw ProviderError(message: L.t(
+                "\(provider.website)가 아닌 주소로 이동돼서 조회를 멈췄어요. 다시 로그인해 주세요.",
+                "The page moved away from \(provider.website), so the check stopped. Please log in again."), kind: .needsLogin)
+        }
         let outcome: Result<Any?, Error>? = await withTimeout(20) {
             do { return .success(try await wv.callAsyncJavaScript(js, contentWorld: .defaultClient)) } catch { return .failure(error) }
         } ?? nil
         guard case .success(let raw)? = outcome else {
-            loadedAt = nil   // reload the page next time
-            NSLog("AIUsage: \(provider.rawValue) web fetch script failed: \(outcome.map { "\($0)" } ?? "timed out")")
-            throw ProviderError.wrap(URLError(.cannotLoadFromNetwork))
+            // A script that timed out may still be running: drop this web view instead of reusing it,
+            // so repeated timeouts can't pile up pages or answers.
+            discardWebView(URLError(.timedOut))
+            NSLog("AIUsage: \(provider.rawValue) web fetch script \(outcome == nil ? "timed out" : "failed")")
+            throw ProviderError.wrap(URLError(.timedOut))
         }
         if let s = raw as? String, let obj = try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any] {
             NSLog("AIUsage: \(provider.rawValue) web fetch -> status \(obj["status"] ?? "?") type \(obj["type"] ?? "?")")
@@ -112,7 +161,9 @@ final class WebAccount: NSObject, WKNavigationDelegate {
 
     /// Loads (or reuses, for up to 30 minutes) a same-origin page to run fetches from.
     private func anchor() async throws -> WKWebView {
-        if let wv = webView, let at = loadedAt, Date().timeIntervalSince(at) < 1800, wv.url?.host == origin.host { return wv }
+        if let wv = webView, let at = loadedAt, Date().timeIntervalSince(at) < 1800, WebOrigin.isOfficial(wv.url, for: provider) {
+            return wv
+        }
         let wv = webView ?? {
             let w = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: Self.configuration())
             w.customUserAgent = Self.userAgent
@@ -120,7 +171,9 @@ final class WebAccount: NSObject, WKNavigationDelegate {
             return w
         }()
         webView = wv
-        if loadWaiters.isEmpty { wv.load(URLRequest(url: anchorURL, timeoutInterval: 20)) }
+        if loadWaiters.isEmpty {
+            pendingNavigation = wv.load(URLRequest(url: anchorURL, timeoutInterval: 20)).map(ObjectIdentifier.init)
+        }
         let loaded: Bool? = await withTimeout(20) {
             do {
                 try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
@@ -130,12 +183,22 @@ final class WebAccount: NSObject, WKNavigationDelegate {
             } catch { return false }
         }
         guard loaded == true else {
-            if loaded == nil { finishLoad(URLError(.timedOut)) }   // release any waiter left behind
-            webView = nil
+            // Timed out (nil) or failed: release every waiter exactly once and drop this web view.
+            discardWebView(URLError(.timedOut))
             throw ProviderError.wrap(URLError(.timedOut))
         }
         loadedAt = Date()
         return wv
+    }
+
+    /// Stops and forgets the hidden web view; anyone still waiting for its page gets `error`.
+    private func discardWebView(_ error: Error) {
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
+        webView = nil
+        loadedAt = nil
+        pendingNavigation = nil
+        finishLoad(error)
     }
 
     private func finishLoad(_ error: Error?) {
@@ -146,16 +209,26 @@ final class WebAccount: NSObject, WKNavigationDelegate {
         }
     }
 
+    /// Only the load we're waiting for, in the web view we still hold, may finish the wait.
+    private func navigationEnded(_ id: ObjectIdentifier?, in view: WKWebView, error: Error?) {
+        guard let id, id == pendingNavigation, view === webView else { return }
+        pendingNavigation = nil
+        finishLoad(error)
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor in self.finishLoad(nil) }
+        let id = navigation.map(ObjectIdentifier.init)
+        Task { @MainActor in self.navigationEnded(id, in: webView, error: nil) }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        Task { @MainActor in self.finishLoad(error) }
+        let id = navigation.map(ObjectIdentifier.init)
+        Task { @MainActor in self.navigationEnded(id, in: webView, error: error) }
     }
 
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        Task { @MainActor in self.finishLoad(error) }
+        let id = navigation.map(ObjectIdentifier.init)
+        Task { @MainActor in self.navigationEnded(id, in: webView, error: error) }
     }
 
     // Returned as a JSON string: {status, type, body, caps?}. status 0 = network failure.
@@ -171,7 +244,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
       const paid = o => (o.capabilities || []).some(c => c === 'claude_max' || c === 'claude_pro');
       const org = orgs.find(o => o.uuid === active && paid(o)) || orgs.find(paid) || orgs.find(o => o.uuid === active) || orgs[0];
       const r = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include'});
-      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', body: await r.text(), caps: org.capabilities || []});
+      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text(), caps: org.capabilities || []});
     } catch (e) {
       return JSON.stringify({status: 0, error: String(e)});
     }
@@ -187,7 +260,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
       const headers = {Authorization: 'Bearer ' + sess.accessToken};
       if (sess.account && sess.account.id) headers['ChatGPT-Account-Id'] = sess.account.id;
       const r = await fetch('/backend-api/wham/usage', {headers, credentials: 'include'});
-      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', body: await r.text()});
+      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text()});
     } catch (e) {
       return JSON.stringify({status: 0, error: String(e)});
     }
@@ -210,6 +283,13 @@ final class LoginWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUID
     private var popups: [NSWindow] = []
     private var completion: ((Bool) -> Void)?
 
+    /// Closes the login window for `p` (and its popups) without reporting success or failure.
+    static func dismiss(_ p: Provider) {
+        guard let lw = openWindows[p] else { return }
+        lw.completion = nil
+        lw.window.close()
+    }
+
     static func show(for account: WebAccount, completion: @escaping (Bool) -> Void) {
         if let existing = openWindows[account.provider] {
             existing.window.makeKeyAndOrderFront(nil)
@@ -228,7 +308,9 @@ final class LoginWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUID
         self.completion = completion
         webView = WKWebView(frame: .zero, configuration: WebAccount.configuration())
         webView.customUserAgent = WebAccount.userAgent
-        if #available(macOS 13.3, *) { webView.isInspectable = true }
+        #if DEBUG
+        if #available(macOS 13.3, *) { webView.isInspectable = true }   // Web Inspector only in development builds
+        #endif
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 760),
                           styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         super.init()
@@ -283,7 +365,7 @@ final class LoginWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUID
     /// Asks the site, from inside this login page, whether the session is valid.
     /// Logs only the status code and page path (never cookies or tokens).
     private func loggedInHere() async -> Bool {
-        guard let host = webView.url?.host, host.hasSuffix(account.origin.host ?? "") else { return false }
+        guard WebOrigin.isOfficial(webView.url, for: account.provider), let host = webView.url?.host else { return false }
         let js = account.provider == .claude
             ? "const r = await fetch('/api/organizations', {credentials: 'include'}); let n = 0; try { const o = await r.json(); n = Array.isArray(o) ? o.length : 0 } catch (e) {} return r.status + ':' + n;"
             : "const r = await fetch('/api/auth/session', {credentials: 'include'}); let n = 0; try { const s = await r.json(); n = (s && s.accessToken) ? 1 : 0 } catch (e) {} return r.status + ':' + n;"
@@ -309,8 +391,19 @@ final class LoginWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUID
         Task { @MainActor in self.state.loading = true }
     }
 
+    nonisolated func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        Task { @MainActor in self.updatePageNotice() }
+    }
+
+    /// The notice under the title says where the user actually is, not just "official page".
+    private func updatePageNotice() {
+        state.pageKind = WebOrigin.classify(webView.url, for: account.provider)
+        state.pageHost = webView.url?.host ?? ""
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
+            self.updatePageNotice()
             self.state.loading = false
             self.state.failed = false
             await self.checkLogin()
@@ -372,6 +465,8 @@ final class LoginHeaderState: ObservableObject {
     @Published var checking = false
     @Published var failed = false
     @Published var done = false
+    @Published var pageKind: WebOrigin.Kind = .official
+    @Published var pageHost = ""
 }
 
 private struct LoginHeader: View {
@@ -403,9 +498,7 @@ private struct LoginHeader: View {
                     .font(.caption).foregroundStyle(.orange)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Label(L.t("\(provider.website) 공식 페이지예요. 비밀번호는 이 페이지에 직접 입력되고, AI Usage는 읽거나 저장하지 않아요.",
-                          "This is the official \(provider.website) page. Your password goes straight to it; AI Usage never reads or stores it."),
-                      systemImage: "lock.shield")
+                pageNotice
                 Label(L.t("Google 로그인이 막히면 이메일로 로그인해 주세요.", "If Google sign-in is blocked, use email instead."),
                       systemImage: "lightbulb")
             }
@@ -415,6 +508,24 @@ private struct LoginHeader: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(.bar)
+    }
+
+    @ViewBuilder private var pageNotice: some View {
+        switch state.pageKind {
+        case .official:
+            Label(L.t("\(provider.website) 공식 페이지예요. 비밀번호는 이 페이지에 직접 입력되고, AI Usage는 읽거나 저장하지 않아요.",
+                      "This is the official \(provider.website) page. Your password goes straight to it; AI Usage never reads or stores it."),
+                  systemImage: "lock.shield")
+        case .identityProvider:
+            Label(L.t("로그인을 위해 \(state.pageHost)(으)로 이동했어요. 끝나면 \(provider.website)로 돌아와요.",
+                      "Signing in through \(state.pageHost). You'll return to \(provider.website) afterwards."),
+                  systemImage: "person.badge.key")
+        case .unknown, .insecure:
+            Label(L.t("지금 페이지(\(state.pageHost.isEmpty ? "알 수 없음" : state.pageHost))는 \(provider.website)가 아니에요. 주소를 확인하기 전에는 로그인 정보를 입력하지 마세요.",
+                      "This page (\(state.pageHost.isEmpty ? "unknown" : state.pageHost)) isn't \(provider.website). Don't enter your login until you've checked the address."),
+                  systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.orange)
+        }
     }
 }
 

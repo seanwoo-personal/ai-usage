@@ -64,14 +64,32 @@ cat > "$APPDIR/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
+# The in-app updater runs the same installer (same checks, same rollback) from inside the bundle.
+cp scripts/install.sh "$APPDIR/Contents/Resources/install.sh"
+
 echo "▸ Signing…"
 if [[ -n "${SIGN_IDENTITY:-}" ]]; then
   codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APPDIR"
 else
   codesign --force --options runtime --sign - "$APPDIR"   # hardened runtime even without a certificate
-  echo "  (ad-hoc signed with hardened runtime — set SIGN_IDENTITY for a Developer ID build)"
+  echo "  (임시 서명 + 강화된 런타임: 파일 무결성만 확인되고 개발자 신원은 증명되지 않아요. SIGN_IDENTITY 로 Developer ID 서명 가능)"
 fi
 codesign --verify --strict "$APPDIR"
+
+# With a Developer ID: notarize the app itself and staple the ticket to it first, so the copy
+# inside the ZIP (which the installer uses) carries the ticket too. Not exercised yet (no account).
+if [[ -n "${SIGN_IDENTITY:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
+  echo "▸ Notarizing app…"
+  NZIP="$(mktemp -d)/app-for-notary.zip"
+  ditto -c -k --keepParent "$APPDIR" "$NZIP"
+  xcrun notarytool submit "$NZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+  xcrun stapler staple "$APPDIR"
+fi
+
+echo "▸ ZIP…"
+(cd "$DIST" && ditto -c -k --keepParent "$APP.app" "$SLUG-$VERSION.zip")
+cp "$DIST/$SLUG-$VERSION.zip" "$DIST/$SLUG.zip"   # stable name the installer downloads from a pinned release
+(cd "$DIST" && shasum -a 256 "$SLUG.zip" > "$SLUG.zip.sha256")
 
 echo "▸ DMG…"
 STAGE="$(mktemp -d)"; cp -R "$APPDIR" "$STAGE/"; ln -s /Applications "$STAGE/Applications"
@@ -79,15 +97,13 @@ cp Resources/*.txt "$STAGE/" 2>/dev/null || true   # first-launch guide
 DMG="$DIST/$SLUG-$VERSION.dmg"
 hdiutil create -volname "$APP" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 [[ -n "${SIGN_IDENTITY:-}" ]] && codesign --force --sign "$SIGN_IDENTITY" "$DMG"
-
-if [[ -n "${NOTARY_PROFILE:-}" ]]; then
-  echo "▸ Notarizing…"
+if [[ -n "${SIGN_IDENTITY:-}" && -n "${NOTARY_PROFILE:-}" ]]; then
+  echo "▸ Notarizing DMG…"
   xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$DMG"
 fi
 
-(cd "$DIST" && ditto -c -k --keepParent "$APP.app" "$SLUG-$VERSION.zip")
-cp "$DIST/$SLUG-$VERSION.zip" "$DIST/$SLUG.zip"   # stable name for releases/latest/download (install.sh)
 echo "✓ $APPDIR"
 echo "✓ $DMG"
 echo "✓ $DIST/$SLUG-$VERSION.zip"
+echo "✓ $DIST/$SLUG.zip + $SLUG.zip.sha256"

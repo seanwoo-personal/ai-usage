@@ -127,8 +127,8 @@ struct OnboardingView: View {
                         text: L.t("한도가 언제 다시 채워지는지 알려줘요.", "When each limit refills."))
                 Feature(icon: "lock.shield",
                         title: L.t("안전하게", "Private by design"),
-                        text: L.t("로그인 정보는 이 Mac에만 저장돼요. 앱은 claude.ai·chatgpt.com 공식 서버와만 통신하고, 개발자를 포함해 누구에게도 정보를 보내지 않아요.",
-                                  "Your login stays on this Mac. The app only talks to claude.ai and chatgpt.com and sends nothing to anyone else — including its developer."))
+                        text: L.t("로그인 정보는 개발자에게 보내지 않아요. Anthropic·OpenAI 공식 서버에 로그인하고 사용량을 물어볼 때만 쓰여요. 이 앱에는 개발자 서버가 없어요.",
+                                  "Your login is never sent to the developer. It's used only with Anthropic's and OpenAI's own servers, to sign in and ask for usage. This app has no server of its own."))
             }
         }
     }

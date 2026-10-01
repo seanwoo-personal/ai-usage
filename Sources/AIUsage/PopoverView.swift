@@ -15,6 +15,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            UpdateBanner()
 
             if store.activeProviders.isEmpty {
                 WelcomeBlock()
@@ -216,7 +217,9 @@ struct ErrorBanner: View {
                     secondary(L.t("웹으로 로그인", "Log in on the web")) { store.logInOnWeb(provider) }
                 case .noLimits:
                     secondary(L.t("다른 계정으로 로그인", "Use another account")) { store.logInOnWeb(provider) }
-                case .network, .rateLimited, .generic:
+                case .rateLimited:
+                    EmptyView()   // waits for the server's allowed time automatically
+                case .network, .server, .generic:
                     secondary(L.t("다시 시도", "Try again")) { store.refresh(provider, manual: true) }
                 }
             }
@@ -228,6 +231,7 @@ struct ErrorBanner: View {
     private var icon: String {
         switch error.kind {
         case .network: return "wifi.exclamationmark"
+        case .server: return "exclamationmark.icloud"
         case .rateLimited: return "hourglass"
         case .needsLogin, .cliExpired, .cliMissing: return "person.crop.circle.badge.exclamationmark"
         case .needsApproval: return "lock"
@@ -238,7 +242,7 @@ struct ErrorBanner: View {
 
     private var tint: Color {
         switch error.kind {
-        case .network, .rateLimited, .noLimits: return .secondary
+        case .network, .server, .rateLimited, .noLimits: return .secondary
         default: return .orange
         }
     }
@@ -265,7 +269,7 @@ struct WindowRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(window.kind.title).font(.system(size: 12, weight: .medium))
                 Spacer()
-                Text("\(Int((showRemaining ? remaining : window.usedPercent).rounded()))%")
+                Text(window.percentText(showRemaining: showRemaining))
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                 Text(showRemaining ? L.t("남음", "left") : L.t("사용", "used"))
@@ -276,7 +280,7 @@ struct WindowRow: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.1))
                     Capsule().fill(tint)
-                        .frame(width: geo.size.width * (showRemaining ? remaining : window.usedPercent) / 100)
+                        .frame(width: geo.size.width * window.barFraction(showRemaining: showRemaining))
                     // Even-pace marker: where you'd be if usage were spread evenly across the window.
                     if let elapsed = window.elapsedFraction(at: now) {
                         let pace = showRemaining ? 1 - elapsed : elapsed
@@ -296,7 +300,7 @@ struct WindowRow: View {
                     Spacer()
                     Text(L.countdown(r.timeIntervalSince(now))).monospacedDigit()
                 } else {
-                    Text(window.didReset ? L.t("리셋됨 — 새로고침 대기", "Reset — waiting for refresh")
+                    Text(window.didReset ? L.t("리셋됨 · 새로고침 대기", "Reset · waiting for refresh")
                                          : L.t("리셋 시각 정보 없음", "Reset time unknown"))
                     Spacer()
                 }
@@ -331,7 +335,7 @@ struct SettingsSection: View {
             .pickerStyle(.segmented)
 
             Picker(L.t("새로고침", "Refresh"), selection: $settings.refreshMinutes) {
-                ForEach([1, 3, 5, 10, 15], id: \.self) { Text(L.t("\($0)분마다", "Every \($0) min")).tag($0) }
+                ForEach(AppSettings.refreshChoices, id: \.self) { Text(L.t("\($0)분마다", "Every \($0) min")).tag($0) }
             }
 
             Toggle(L.t("메뉴 막대에 리셋까지 남은 시간 표시", "Show time to reset in menu bar"), isOn: $settings.showResetInBar)
@@ -344,11 +348,77 @@ struct SettingsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            UpdateSettings()
+
             Text("AI Usage \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · " + L.t("만든 사람: Sean", "Made by Sean"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .font(.callout)
         .toggleStyle(.checkbox)
+    }
+}
+
+/// Shown at the top of the popover when a newer version is out (or an update is running).
+struct UpdateBanner: View {
+    @EnvironmentObject var updater: Updater
+
+    var body: some View {
+        if let release = updater.available {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(L.t("새 버전 \(release.version)이 나왔어요", "Version \(release.version) is available"),
+                      systemImage: "arrow.down.circle")
+                    .font(.system(size: 12.5, weight: .semibold))
+                if updater.installing {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text(L.t("확인하고 설치하는 중이에요. 끝나면 앱이 다시 열려요.", "Checking and installing. The app reopens when done."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        Button(L.t("업데이트", "Update")) { updater.install() }
+                            .buttonStyle(.borderedProminent).controlSize(.small)
+                            .disabled(!updater.canInstall)
+                        Button(L.t("바뀐 점", "What's new")) { NSWorkspace.shared.open(release.page) }
+                            .buttonStyle(.link).font(.caption)
+                    }
+                    if !updater.canInstall {
+                        Text(L.t("응용 프로그램 폴더에 설치된 앱에서 업데이트할 수 있어요.", "Updates run from the app in your Applications folder."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                if let problem = updater.problem {
+                    Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.1)))
+        }
+    }
+}
+
+/// "Check for updates automatically" + manual check, in Settings.
+struct UpdateSettings: View {
+    @EnvironmentObject var updater: Updater
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(L.t("새 버전 자동으로 확인 (하루 한 번)", "Check for new versions automatically (daily)"), isOn: Binding(
+                get: { updater.autoCheck }, set: { updater.autoCheck = $0 }))
+            HStack(spacing: 8) {
+                Button(L.t("지금 확인", "Check now")) { Task { await updater.check() } }
+                    .controlSize(.small).disabled(updater.checking)
+                if updater.checking {
+                    ProgressView().controlSize(.small)
+                } else if updater.available == nil, let last = updater.lastChecked {
+                    Text(L.t("최신 버전이에요 · \(L.ago(last)) 확인", "Up to date · checked \(L.ago(last))"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if updater.available == nil, let problem = updater.problem {
+                Text(problem).font(.caption).foregroundStyle(.orange)
+            }
+        }
     }
 }

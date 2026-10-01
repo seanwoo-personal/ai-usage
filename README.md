@@ -25,7 +25,9 @@ curl -fsSL https://raw.githubusercontent.com/seanwoo-personal/ai-usage/main/scri
 **3. 자동으로 열리는 안내 창에서 Claude와 ChatGPT 계정을 연결합니다.**
 평소 쓰는 계정으로 한 번만 로그인하면 끝입니다. 터미널에서 Claude Code나 Codex를 쓰고 있다면 버튼 하나로 바로 연결할 수도 있습니다.
 
-> 이 방법은 Mac 암호를 묻지 않고, "확인되지 않은 개발자" 경고 창도 뜨지 않습니다.
+> 이 방법은 Mac 암호를 묻지 않고 "확인되지 않은 개발자" 경고 창도 뜨지 않습니다.
+> 대신 Apple의 검사(공증)를 거치지 않은 앱을 설치한다는 뜻이기도 합니다. 설치 스크립트가 릴리스의 해시(파일 지문)와
+> 앱 서명의 무결성을 확인하고, 문제가 있으면 기존 앱을 그대로 둔 채 멈추지만, 만든 사람을 Apple이 보증하지는 않습니다.
 
 <details>
 <summary>터미널 대신 DMG 파일로 설치하기</summary>
@@ -46,7 +48,9 @@ Apple 유료 개발자 인증을 받지 않은 앱이라 생기는 과정입니�
 
 ## 업데이트
 
-설치할 때와 같은 명령을 다시 실행하면 최신 버전으로 바뀝니다. 연결한 계정과 설정은 그대로 유지됩니다.
+앱이 하루에 한 번 새 버전을 확인합니다. 새 버전이 있으면 메뉴 막대 아이콘을 눌렀을 때 맨 위에 **"새 버전이 나왔어요 [업데이트]"**가 보이고, 누르면 확인을 거쳐 설치한 뒤 앱이 다시 열립니다. 설정에서 자동 확인을 끄거나 "지금 확인"을 누를 수 있습니다.
+
+터미널에서 설치할 때와 같은 명령을 다시 실행해도 최신 버전으로 바뀝니다. 연결한 계정과 설정은 그대로 유지됩니다.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/seanwoo-personal/ai-usage/main/scripts/install.sh | bash
@@ -71,10 +75,12 @@ rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.ai
 
 ## 안전한가요?
 
-- **남은 사용량(%)과 리셋 시간만 읽습니다.** 대화 내용, 파일, 결제 정보는 보지 않습니다.
-- **로그인 정보는 이 Mac 밖으로 나가지 않습니다.** 개발자 서버가 없고, Anthropic(claude.ai)과 OpenAI(chatgpt.com) 공식 서버와만 통신합니다.
-- **비밀번호는 공식 로그인 페이지에 직접 입력됩니다.** 앱은 비밀번호를 읽거나 저장하지 않습니다.
-- **언제든 연결을 해제할 수 있습니다.** 웹 로그인은 해제할 때 앱에 남은 로그인도 함께 지워집니다.
+- **가져오는 건 남은 사용량(%)과 리셋 시간뿐입니다.** 대화 내용, 파일, 결제 정보는 저장하거나 보내지 않습니다.
+- **로그인 정보는 개발자에게 보내지 않습니다.** 이 앱에는 개발자 서버가 없습니다. 로그인 정보는 Anthropic(claude.ai, api.anthropic.com)과 OpenAI(chatgpt.com) 공식 서버에 로그인하고 사용량을 물어볼 때만 쓰입니다.
+- **비밀번호는 공식 로그인 페이지에 직접 입력됩니다.** 앱은 비밀번호를 읽거나 저장하지 않습니다. 로그인 창은 지금 보고 있는 주소가 공식 사이트인지, Google·Apple 같은 로그인 단계인지, 그 밖의 사이트인지 구분해서 알려 줍니다.
+- **터미널 로그인(Claude Code·Codex)을 쓸 때:** 각 도구가 저장해 둔 로그인 정보를 읽기만 하고 고치거나 지우지 않습니다. Codex는 서버 조회가 안 될 때 대화 기록 파일(`~/.codex/sessions`)의 끝부분을 읽어 사용량 숫자만 꺼내고, 대화 내용은 저장하거나 보내지 않습니다.
+- **연결 해제:** 앱 안에 저장된 그 서비스의 로그인이 지워집니다. Google·Apple 로그인 상태는 두 서비스가 함께 쓰므로, 웹으로 연결된 서비스를 모두 해제할 때 함께 지워집니다. Claude Code·Codex 자체의 로그인은 그대로 둡니다.
+- **업데이트 확인:** 하루 한 번 GitHub(api.github.com)에 최신 버전을 묻습니다. 설정에서 끌 수 있습니다.
 - 소스 코드가 모두 공개되어 있습니다(이 저장소).
 
 ## 자주 묻는 질문
@@ -132,14 +138,17 @@ Google이 앱 안 로그인 창을 막는 경우가 있습니다. 같은 로그�
 Xcode 없이 Command Line Tools만으로 빌드됩니다.
 
 ```bash
-./scripts/selftest.sh     # 파싱·표시·로그인 항목 로직 자체 테스트
+./scripts/selftest.sh     # 앱 로직 테스트 + 설치 스크립트 격리 테스트(scripts/test-install.sh)
 VERSION=1.2.0 ./scripts/build-app.sh    # dist/AI Usage.app, AI-Usage-<버전>.dmg, .zip, AI-Usage.zip(릴리스용)
 ```
 
 - `VERSION`: 앱 버전 (기본 1.0.0)
 - 번들 ID는 `com.sean.aiusage`로 고정돼 있어 바꿀 수 없습니다(설정·로그인 정보·로그인 항목이 이 ID에 묶여 있음).
 - `SIGN_IDENTITY`: `"Developer ID Application: 이름 (TEAMID)"`, 없으면 임시(ad-hoc) 서명 + 강화된 런타임
-- `NOTARY_PROFILE`: `xcrun notarytool store-credentials`로 만든 프로필 이름, 있으면 공증까지 진행
+- `NOTARY_PROFILE`: `xcrun notarytool store-credentials`로 만든 프로필 이름, 있으면 공증까지 진행(아직 실제로 검증하지 않음)
+- 빌드 결과에 `AI-Usage.zip.sha256`이 함께 만들어집니다. 릴리스에 꼭 같이 올려야 설치·업데이트가 동작합니다.
+
+설치 스크립트(`scripts/install.sh`)는 정확한 릴리스 버전을 고정하고, HTTPS로만 받고, 해시·압축 경로·번들 ID·실행 파일·아키텍처·최소 macOS·서명 무결성을 확인한 다음, 설치 위치 옆에 복사해 두고 마지막에 바꿔치기합니다. 실패하면 기존 앱으로 되돌립니다. 앱 안의 업데이트 기능도 같은 스크립트를 씁니다. 해시는 앱과 같은 릴리스에서 받으므로, 릴리스 자체가 바뀐 경우까지 막지는 못합니다.
 
 로고 경로는 Simple Icons(CC0)에서 가져왔습니다. Claude, Anthropic, OpenAI, Codex는 각 회사의 상표입니다.
 

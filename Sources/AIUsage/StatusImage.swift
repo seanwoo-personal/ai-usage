@@ -19,12 +19,13 @@ enum StatusImage {
             guard let snap = entry?.snapshot else {
                 return Block(provider: p, top: "", bottom: entry?.error != nil ? "!" : "…")
             }
+            // Real windows only; `fallback` is what to show when the chosen kind doesn't exist.
+            // It is never labelled as a weekly or 5-hour limit it isn't.
             let session = snap.window { $0 == .session }?.effective(at: store.now)
-            let weekly = (snap.window { $0 == .weekly } ?? snap.windows.last)?.effective(at: store.now)
+            let weekly = snap.window { $0 == .weekly }?.effective(at: store.now)
+            let fallback = snap.windows.first?.effective(at: store.now)
             let flag = entry?.error != nil ? "!" : ""
-            func pct(_ w: UsageWindow) -> String {
-                "\(Int((showRemaining ? w.remainingPercent : w.usedPercent).rounded()))%"
-            }
+            func pct(_ w: UsageWindow) -> String { w.percentText(showRemaining: showRemaining) }
             func countdown(_ w: UsageWindow) -> String {
                 guard showReset, let r = w.resetsAt else { return "" }
                 return dayHour(r.timeIntervalSince(now))
@@ -37,7 +38,7 @@ enum StatusImage {
             case .session where session != nil:
                 return Block(provider: p, top: countdown(session!), bottom: pct(session!) + flag)
             default:
-                guard let w = weekly ?? session else { return Block(provider: p, top: "", bottom: "…") }
+                guard let w = weekly ?? session ?? fallback else { return Block(provider: p, top: "", bottom: "…") }
                 return Block(provider: p, top: countdown(w), bottom: pct(w) + flag)
             }
         }
@@ -45,7 +46,7 @@ enum StatusImage {
 
     /// Always "Xd Yh", e.g. "6d 2h", "0d 3h".
     static func dayHour(_ interval: TimeInterval) -> String {
-        let hours = max(0, Int(interval / 3600))
+        let hours = L.minutes(interval) / 60
         return "\(hours / 24)d \(hours % 24)h"
     }
 

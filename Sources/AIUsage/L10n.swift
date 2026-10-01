@@ -6,9 +6,15 @@ enum L {
 
     static func t(_ ko: String, _ en: String) -> String { isKorean ? ko : en }
 
+    /// Whole minutes in `interval`, clamped to 0...999 days so formatting never overflows.
+    static func minutes(_ interval: TimeInterval) -> Int {
+        guard interval.isFinite, interval > 0 else { return 0 }
+        return Int(min(interval / 60, 999 * 1440))
+    }
+
     /// Compact countdown for the menu bar: "2d4h", "5h12m", "42m".
     static func compact(_ interval: TimeInterval) -> String {
-        let mins = max(0, Int(interval / 60))
+        let mins = minutes(interval)
         let d = mins / 1440, h = (mins % 1440) / 60, m = mins % 60
         if d > 0 { return "\(d)d\(h)h" }
         if h > 0 { return "\(h)h\(m)m" }
@@ -17,7 +23,7 @@ enum L {
 
     /// Readable countdown for the popover: "3일 4시간 후" / "in 3d 4h".
     static func countdown(_ interval: TimeInterval) -> String {
-        let mins = max(0, Int(interval / 60))
+        let mins = minutes(interval)
         let d = mins / 1440, h = (mins % 1440) / 60, m = mins % 60
         let body: String
         if isKorean {
@@ -29,7 +35,7 @@ enum L {
     }
 
     static func ago(_ date: Date, now: Date = Date()) -> String {
-        let mins = Int(now.timeIntervalSince(date) / 60)
+        let mins = minutes(now.timeIntervalSince(date))
         if mins < 1 { return t("방금", "just now") }
         if mins < 60 { return t("\(mins)분 전", "\(mins)m ago") }
         let h = mins / 60
@@ -45,4 +51,16 @@ enum L {
     }()
 
     static func resetDate(_ date: Date) -> String { resetFormatter.string(from: date) }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("jmm")
+        return f
+    }()
+
+    /// "오후 3:05" today, otherwise the date and time.
+    static func time(_ date: Date) -> String {
+        Calendar.current.isDateInToday(date) ? timeFormatter.string(from: date) : resetFormatter.string(from: date)
+    }
 }

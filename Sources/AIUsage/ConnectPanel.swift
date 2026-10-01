@@ -9,12 +9,12 @@ struct TrustBlock: View {
             Label(L.t("안심하고 연결하세요", "Safe to connect"), systemImage: "lock.shield.fill")
                 .font(.system(size: compact ? 12 : 13, weight: .semibold))
                 .foregroundStyle(.green)
-            TrustLine(L.t("남은 사용량(%)과 리셋 시간만 읽어요. 대화 내용·파일·결제 정보는 보지 않아요.",
-                          "Reads only remaining usage (%) and reset times — never your chats, files or billing."))
-            TrustLine(L.t("로그인 정보는 이 Mac 밖으로 나가지 않아요. 개발자 서버는 없고, Anthropic·OpenAI 공식 서버와만 통신해요.",
-                          "Your login never leaves this Mac. There's no developer server — only Anthropic's and OpenAI's own."))
-            TrustLine(L.t("언제든 설정에서 연결을 해제할 수 있어요. 웹 로그인은 해제할 때 앱에 남은 로그인도 함께 지워져요.",
-                          "Disconnect any time in Settings. For web logins, that also erases the login saved in the app."))
+            TrustLine(L.t("가져오는 건 남은 사용량(%)과 리셋 시간뿐이에요. 대화 내용·파일·결제 정보는 저장하거나 보내지 않아요.",
+                          "Only remaining usage (%) and reset times are kept. Chats, files and billing details are never stored or sent."))
+            TrustLine(L.t("로그인 정보는 개발자에게 보내지 않아요. Anthropic·OpenAI 공식 서버에 로그인하고 사용량을 물어볼 때만 쓰여요. 이 앱에는 개발자 서버가 없어요.",
+                          "Your login is never sent to the developer. It's used only with Anthropic's and OpenAI's own servers, to sign in and ask for usage. This app has no server of its own."))
+            TrustLine(L.t("연결을 해제하면 앱 안에 저장된 그 서비스의 로그인이 지워져요. Claude Code·Codex 자체의 로그인은 그대로 둬요.",
+                          "Disconnecting erases that service's login saved in the app. Claude Code's and Codex's own logins are left as they are."))
         }
         .font(compact ? .caption : .callout)
         .padding(compact ? 10 : 14)
@@ -88,8 +88,8 @@ struct ConnectPanel: View {
             details: provider == .claude
                 ? L.t("Claude Code가 macOS 키체인에 저장해 둔 로그인 정보를 읽기만 해요. 수정하거나 다른 곳에 복사·저장하지 않고, Anthropic 공식 서버(api.anthropic.com)에 남은 사용량을 물어볼 때만 써요. macOS가 허용 여부를 물으면 '항상 허용'을 눌러 주세요 — 그래야 다시 묻지 않아요.",
                       "Reads — never changes, copies or stores — the login Claude Code keeps in your macOS Keychain, only to ask Anthropic's own server (api.anthropic.com) for your remaining usage. If macOS asks, choose “Always Allow” so it won't ask again.")
-                : L.t("Codex CLI가 저장해 둔 로그인 파일(~/.codex/auth.json)을 읽기만 해요. 수정하거나 다른 곳에 복사·저장하지 않고, OpenAI 공식 서버(chatgpt.com)에 남은 사용량을 물어볼 때만 써요.",
-                      "Reads — never changes, copies or stores — the login file Codex CLI keeps (~/.codex/auth.json), only to ask OpenAI's own server (chatgpt.com) for your remaining usage."),
+                : L.t("Codex CLI가 저장해 둔 로그인 파일(~/.codex/auth.json)을 읽기만 해요. 수정하거나 다른 곳에 복사·저장하지 않고, OpenAI 공식 서버(chatgpt.com)에 남은 사용량을 물어볼 때만 써요. 서버 조회가 안 될 때는 Codex 대화 기록 파일(~/.codex/sessions)의 끝부분을 읽어 사용량 숫자만 꺼내요. 대화 내용은 저장하거나 보내지 않아요.",
+                      "Reads — never changes, copies or stores — the login file Codex CLI keeps (~/.codex/auth.json), only to ask OpenAI's own server (chatgpt.com) for your remaining usage. If that check fails, it reads the end of Codex's conversation logs (~/.codex/sessions) to pick out the usage numbers only; conversation text is never stored or sent."),
             buttonTitle: ready ? L.t("바로 연결", "Connect") : L.t("터미널에서 로그인", "Log in in Terminal"),
             prominent: recommended,
             action: { store.useCLI(provider) })
@@ -102,8 +102,8 @@ struct ConnectPanel: View {
             badge: nil,
             text: L.t("\(provider.cliName)를 쓰지 않아도 돼요. 평소 쓰는 계정으로 한 번만 로그인하면 끝이에요.",
                       "No \(provider.cliName) needed. Log in once with the account you already use."),
-            details: L.t("\(provider.website) 공식 로그인 페이지가 그대로 열려요. 비밀번호는 그 페이지에 직접 입력되고, AI Usage는 읽거나 저장하지 않아요. 로그인 상태는 Safari와 같은 방식으로 이 앱 안에만 보관되고, 설정에서 '연결 해제'를 누르면 지워져요.",
-                         "The official \(provider.website) login page opens as-is. Your password goes straight into that page; AI Usage never reads or stores it. The login is kept inside this app the way Safari keeps it, and “Disconnect” erases it."),
+            details: L.t("\(provider.website) 공식 로그인 페이지가 그대로 열려요. 비밀번호는 그 페이지에 직접 입력되고, AI Usage는 읽거나 저장하지 않아요. 로그인 상태는 Safari처럼 이 앱 전용 저장공간에 보관되고, '연결 해제'를 누르면 지워져요. Google·Apple로 로그인했다면 그 로그인 상태는 두 서비스가 함께 쓰므로, 웹으로 연결된 서비스를 모두 해제할 때 함께 지워져요.",
+                         "The official \(provider.website) login page opens as-is. Your password goes straight into that page; AI Usage never reads or stores it. The login is kept in this app's own storage, the way Safari keeps it, and “Disconnect” erases it. A Google or Apple sign-in is shared by both services, so it's erased once no service is connected through the web."),
             buttonTitle: L.t("로그인", "Log in"),
             prominent: recommended,
             action: { store.logInOnWeb(provider) })

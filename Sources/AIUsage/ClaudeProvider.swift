@@ -15,10 +15,35 @@ final class ClaudeProvider: @unchecked Sendable {
     private static let keychainService = "Claude Code-credentials"
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
+    /// Where Claude Code's login is read from. Tests pass a fake; the app uses the Keychain and
+    /// ~/.claude/.credentials.json. Reading never modifies or deletes the original.
+    struct CredentialSource {
+        var version: () -> Date?                                  // Keychain item date (no prompt)
+        var readSecret: (_ interactive: Bool) -> (Data?, OSStatus)
+        var fileDate: () -> Date?
+        var readFile: () -> Data?
+
+        static let live = CredentialSource(
+            version: { ClaudeProvider.keychainItemVersion() },
+            readSecret: { ClaudeProvider.readSecret(interactive: $0) },
+            fileDate: { ClaudeProvider.credentialsFileDate() },
+            readFile: { try? Data(contentsOf: ClaudeProvider.credentialsFile) })
+    }
+
+    private let source: CredentialSource
+    init(source: CredentialSource = .live) { self.source = source }
+
     private let lock = NSLock()
     private var cached: Credentials?
     /// Modification date of the keychain item the cached token came from (reading attributes never prompts).
     private var cachedVersion: Date?
+
+    /// Forgets the token this app holds in memory. Claude Code's own Keychain item is left untouched.
+    func resetCache() {
+        lock.lock(); defer { lock.unlock() }
+        cached = nil
+        cachedVersion = nil
+    }
 
     /// `interactive` is true only when the user pressed "Connect" / refresh. Background refreshes
     /// never show the Keychain prompt: if access would need approval they fail with `needsApproval`.
@@ -54,7 +79,7 @@ final class ClaudeProvider: @unchecked Sendable {
                 "Claude Code 로그인이 더 이상 유효하지 않아요. 웹으로 로그인하거나 터미널에서 Claude Code에 다시 로그인해 주세요.",
                 "Claude Code's login is no longer valid. Log in on the web, or log in to Claude Code again."),
                 kind: .cliExpired)
-        case 429: throw ProviderError.rateLimited
+        case 429: throw ProviderError.rateLimited(until: RetryPolicy.retryAt(header: lastRetryAfter, now: Date()))
         default: throw ProviderError.server(status)
         }
 
@@ -68,7 +93,7 @@ final class ClaudeProvider: @unchecked Sendable {
 
         var windows: [UsageWindow] = []
         func add(_ key: String, _ kind: WindowKind, minutes: Int) {
-            guard let w = json[key] as? [String: Any], let util = Parse.double(w["utilization"]) else { return }
+            guard let w = json[key] as? [String: Any], let util = Parse.percent(w["utilization"]) else { return }
             windows.append(UsageWindow(kind: kind, usedPercent: util, resetsAt: Parse.date(w["resets_at"]), windowMinutes: minutes))
         }
         add("five_hour", .session, minutes: 300)
@@ -88,13 +113,22 @@ final class ClaudeProvider: @unchecked Sendable {
     }
 
     private func request(token: String) async throws -> (Data, Int) {
+        let (data, status, _) = try await requestWithHeaders(token: token)
+        return (data, status)
+    }
+
+    private var lastRetryAfter: String?
+
+    private func requestWithHeaders(token: String) async throws -> (Data, Int, HTTPURLResponse?) {
         var req = URLRequest(url: Self.usageURL, timeoutInterval: 20)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("AIUsage", forHTTPHeaderField: "User-Agent")
         let (data, resp) = try await URLSession.shared.data(for: req)
-        return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
+        let http = resp as? HTTPURLResponse
+        lastRetryAfter = http?.value(forHTTPHeaderField: "Retry-After")
+        return (data, http?.statusCode ?? 0, http)
     }
 
     /// Claude Code has logged in on this Mac (checked without triggering any Keychain prompt).
@@ -102,11 +136,11 @@ final class ClaudeProvider: @unchecked Sendable {
         keychainItemVersion() != nil || FileManager.default.fileExists(atPath: credentialsFile.path)
     }
 
-    private static var credentialsFile: URL {
+    static var credentialsFile: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/.credentials.json")
     }
 
-    private static func credentialsFileDate() -> Date? {
+    static func credentialsFileDate() -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: credentialsFile.path))?[.modificationDate] as? Date
     }
 
@@ -121,18 +155,26 @@ final class ClaudeProvider: @unchecked Sendable {
     // MARK: - Credentials
 
     /// Returns the cached token unless `wantNewer` is set and Claude Code has rewritten its keychain item.
+    /// The token for the current Claude Code login. The cached copy is used only while Claude Code's
+    /// stored login is unchanged; once it changes (token refresh or a different account) the cache is
+    /// dropped and the new login is read. If it can't be read, the old token is NOT used as a stand-in,
+    /// because it may belong to the previous account. `wantNewer` is kept for call-site clarity.
     private func credentials(interactive: Bool, wantNewer: Bool) throws -> Credentials {
         lock.lock(); defer { lock.unlock() }
 
-        let keychainVersion = Self.keychainItemVersion()
-        let version = keychainVersion ?? Self.credentialsFileDate()
-        if let c = cached, !wantNewer || version == nil || version == cachedVersion { return c }
+        let keychainVersion = source.version()
+        guard let version = keychainVersion ?? source.fileDate() else {
+            cached = nil; cachedVersion = nil
+            throw ProviderError(message: L.t("이 Mac에서 Claude Code 로그인 정보를 찾지 못했어요. 웹으로 로그인해 주세요.",
+                                             "No Claude Code login on this Mac. Log in on the web instead."), kind: .cliMissing)
+        }
+        if let c = cached, version == cachedVersion { return c }
+        cached = nil; cachedVersion = nil
 
         var raw: Data?
         if keychainVersion != nil {
-            let (data, status) = Self.readSecret(interactive: interactive)
+            let (data, status) = source.readSecret(interactive)
             if data == nil, status == errSecInteractionNotAllowed || status == errSecUserCanceled || status == errSecAuthFailed {
-                if let c = cached, !c.isExpired { return c }
                 throw ProviderError(message: status == errSecInteractionNotAllowed
                     ? L.t("Claude Code 로그인 정보를 읽으려면 macOS 허용이 한 번 필요해요. 버튼을 누르고 나오는 창에서 '항상 허용'을 선택해 주세요.",
                           "macOS needs your OK once to read Claude Code's login. Press the button and choose “Always Allow”.")
@@ -142,7 +184,7 @@ final class ClaudeProvider: @unchecked Sendable {
             }
             raw = data
         }
-        if raw == nil { raw = try? Data(contentsOf: Self.credentialsFile) }
+        if raw == nil { raw = source.readFile() }
         guard let data = raw else {
             throw ProviderError(message: L.t("이 Mac에서 Claude Code 로그인 정보를 찾지 못했어요. 웹으로 로그인해 주세요.",
                                              "No Claude Code login on this Mac. Log in on the web instead."), kind: .cliMissing)
@@ -159,6 +201,9 @@ final class ClaudeProvider: @unchecked Sendable {
         cachedVersion = version
         return c
     }
+
+    /// Test hook: which token would be used right now (no network).
+    func tokenForTesting() throws -> String { try credentials(interactive: false, wantNewer: false).accessToken }
 
     /// SecKeychainSetUserInteractionAllowed is process-wide, so all keychain calls go through this lock.
     private static let keychainLock = NSLock()
@@ -177,7 +222,7 @@ final class ClaudeProvider: @unchecked Sendable {
     }
 
     /// Item attributes only — never shows a prompt. nil when the item doesn't exist.
-    private static func keychainItemVersion() -> Date? {
+    static func keychainItemVersion() -> Date? {
         var q = baseQuery
         q[kSecReturnAttributes as String] = true
         var out: CFTypeRef?
@@ -192,7 +237,7 @@ final class ClaudeProvider: @unchecked Sendable {
     ///     dialog it might raise is dismissed instead of interrupting the user.
     ///  2. our own Keychain access with dialogs switched off (works once the user chose "Always Allow")
     ///  3. only when the user pressed Connect: our own Keychain access with the dialog allowed.
-    private static func readSecret(interactive: Bool) -> (Data?, OSStatus) {
+    static func readSecret(interactive: Bool) -> (Data?, OSStatus) {
         if let viaTool = readViaSecurityTool(timeout: interactive ? 60 : 3) { return (viaTool, errSecSuccess) }
         let (silent, status) = readKeychainSecret(allowPrompt: false)
         if let silent { return (silent, status) }

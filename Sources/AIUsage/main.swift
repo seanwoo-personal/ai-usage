@@ -6,6 +6,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = AppSettings()
     private lazy var store = UsageStore(settings: settings)
+    private let updater = Updater()
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
@@ -16,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.action = #selector(togglePopover(_:))
         statusItem.button?.imagePosition = .imageOnly
 
-        let host = NSHostingController(rootView: PopoverView().environmentObject(store).environmentObject(settings))
+        let host = NSHostingController(rootView: PopoverView().environmentObject(store).environmentObject(settings).environmentObject(updater))
         host.sizingOptions = .preferredContentSize
         popover.contentViewController = host
         popover.behavior = .transient
@@ -31,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItem.reconcileAtLaunch()
         redraw()
         store.start()
+        updater.start()
 
         AppActions.showOnboarding = { [weak self] in
             guard let self else { return }

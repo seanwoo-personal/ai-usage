@@ -2,14 +2,18 @@
 // Run: ./scripts/selftest.sh   (compiles the app sources without main.swift plus this file)
 import AppKit
 
-var failures = 0
+var failures = 0, passes = 0, skips = 0
 func check(_ cond: Bool, _ name: String, file: String = #file, line: Int = #line) {
-    if cond { print("  ✓ \(name)") } else { failures += 1; print("  ✗ \(name)  (line \(line))") }
+    if cond { passes += 1; print("  ✓ \(name)") } else { failures += 1; print("  ✗ \(name)  (\((file as NSString).lastPathComponent):\(line))") }
 }
+func skip(_ name: String, _ why: String) { skips += 1; print("  – \(name)  [skipped: \(why)]") }
 
 @main
 struct SelfTest {
     @MainActor static func main() async {
+        if CommandLine.arguments.count >= 3, CommandLine.arguments[1] == "probe" {
+            Regression.runProbe(CommandLine.arguments[2])
+        }
         print("Parse.date")
         let d1 = Parse.date("2026-10-04T14:34:56.123456+00:00")
         check(d1 == Date(timeIntervalSince1970: 1_791_124_496), "ISO-8601 with microseconds + offset")
@@ -81,13 +85,8 @@ struct SelfTest {
             check(snap.windows[0].resetsAt.map { abs($0.timeIntervalSinceNow - 3600) < 5 } ?? false, "reset_after_seconds fallback")
         } else { check(false, "parse Codex 5h+weekly fixture") }
 
-        print("Codex session logs (real files on this Mac, read-only)")
-        if let snap = CodexProvider().latestFromLogs() {
-            check(!snap.windows.isEmpty, "found rate_limits in logs: \(snap.windows.map { "\($0.kind.title) \(Int($0.remainingPercent))% left" })")
-        } else { print("  – no Codex logs in the last 8 days (skipped)") }
-
         print("Menu bar blocks")
-        let settings = AppSettings()
+        let settings = AppSettings.forTesting()
         let store = UsageStore(settings: settings)
         let claudeSnap = try! ClaudeProvider.parseUsage(Data(claudeJSON.utf8), plan: nil)
         store.testInject(.claude, claudeSnap)
@@ -145,7 +144,11 @@ struct SelfTest {
         check(action(false, app, app, true) == .forget, "off, record left over → forget record")
         check(action(false, nil, app, true) == .nothing, "off, no record → nothing")
 
-        print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
-        exit(failures == 0 ? 0 : 1)
+        Regression.run()
+        await Regression.runAsync()
+
+        print("\n\(passes) passed, \(failures) failed, \(skips) skipped")
+        print(failures == 0 && passes > 0 ? "ALL PASSED" : "FAILED")
+        exit(failures == 0 && passes > 0 ? 0 : 1)
     }
 }

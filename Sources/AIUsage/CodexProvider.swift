@@ -24,6 +24,8 @@ final class CodexProvider: @unchecked Sendable {
         var liveError: Error?
         do {
             if let snap = try await fetchLive() { return snap }
+        } catch let e as ProviderError where e.kind == .rateLimited {
+            throw e   // keep the server's wait; older log numbers mustn't hide that live checks are paused
         } catch {
             liveError = error
         }
@@ -60,7 +62,10 @@ final class CodexProvider: @unchecked Sendable {
         let (body, resp) = try await URLSession.shared.data(for: req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
-            if status == 429 { throw ProviderError.rateLimited }
+            if status == 429 {
+                let header = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
+                throw ProviderError.rateLimited(until: RetryPolicy.retryAt(header: header, now: Date()))
+            }
             throw status == 401 || status == 403
                 ? ProviderError(message: L.t("Codex CLI의 로그인 정보가 오래됐어요. Codex를 한동안 실행하지 않으면 이렇게 돼요. 웹으로 로그인하면 계속 표시돼요.",
                                              "Codex CLI's login has gone stale. Log in on the web instead and it stays up to date."), kind: .cliExpired)
@@ -74,10 +79,9 @@ final class CodexProvider: @unchecked Sendable {
               let limits = json["rate_limit"] as? [String: Any] else { return nil }
 
         let windows = ["primary_window", "secondary_window"].compactMap { key -> UsageWindow? in
-            guard let w = limits[key] as? [String: Any], let used = Parse.double(w["used_percent"]) else { return nil }
-            let minutes = Parse.int(w["limit_window_seconds"]).map { $0 / 60 }
-            var reset = Parse.date(w["reset_at"])
-            if reset == nil, let after = Parse.double(w["reset_after_seconds"]) { reset = Date().addingTimeInterval(after) }
+            guard let w = limits[key] as? [String: Any], let used = Parse.percent(w["used_percent"]) else { return nil }
+            let minutes = Parse.windowMinutes(Parse.int(w["limit_window_seconds"]).map { $0 / 60 })
+            let reset = Parse.date(w["reset_at"]) ?? Parse.date(after: Parse.double(w["reset_after_seconds"]), from: Date())
             return UsageWindow(kind: .from(minutes: minutes), usedPercent: used, resetsAt: reset, windowMinutes: minutes)
         }
         guard !windows.isEmpty else { return nil }
@@ -88,59 +92,94 @@ final class CodexProvider: @unchecked Sendable {
 
     // MARK: - Session logs
 
-    /// Scans the last 8 days of ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, newest first,
-    /// and returns the most recent `rate_limits` event.
-    func latestFromLogs() -> ProviderSnapshot? {
-        let fm = FileManager.default
-        let base = codexHome.appendingPathComponent("sessions")
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = .current
-        var files: [(URL, Date)] = []
-        for offset in 0..<8 {
-            guard let day = cal.date(byAdding: .day, value: -offset, to: Date()) else { continue }
-            let c = cal.dateComponents([.year, .month, .day], from: day)
-            let dir = base.appendingPathComponent(String(format: "%04d/%02d/%02d", c.year!, c.month!, c.day!))
-            guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
-            for f in items where f.lastPathComponent.hasPrefix("rollout-") && f.pathExtension == "jsonl" {
-                let m = (try? f.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                files.append((f, m))
+    /// Limits that keep the log fallback cheap.
+    static let logRecentDays = 8          // only files touched in this many days
+    static let logMaxFiles = 40           // files actually read
+    static let logTailBytes = 1_000_000   // bytes read from the end of each file
+    static let logMaxEntriesVisited = 20_000
+
+    /// The newest valid `rate_limits` event in recent Codex session logs.
+    /// File modification times only decide the reading order; the result is chosen by event time.
+    /// Only the usage numbers are extracted — conversation text in these files is never kept.
+    func latestFromLogs(now: Date = Date()) -> ProviderSnapshot? {
+        let files = recentLogFiles(now: now)
+        var best: (Date, ProviderSnapshot)?
+        for (file, mtime) in files.prefix(Self.logMaxFiles) {
+            // Files are sorted newest-first; a file can't hold an event newer than its last write.
+            if let b = best, mtime < b.0 { break }
+            guard let (data, cut) = Self.readTail(of: file, bytes: Self.logTailBytes) else { continue }
+            for event in Self.events(inTail: data, startsMidFile: cut, now: now) where best.map({ event.0 > $0.0 }) ?? true {
+                best = event
             }
         }
-        files.sort { $0.1 > $1.1 }
-
-        for (file, _) in files.prefix(30) {
-            if let snap = parseLatest(in: file) { return snap }
-        }
-        return nil
+        return best?.1
     }
 
-    private func parseLatest(in file: URL) -> ProviderSnapshot? {
+    /// rollout-*.jsonl files modified recently, newest first: the dated folders of the last days,
+    /// plus older folders (a resumed conversation keeps writing to its original day's folder).
+    private func recentLogFiles(now: Date) -> [(URL, Date)] {
+        let fm = FileManager.default
+        let base = codexHome.appendingPathComponent("sessions")
+        let cutoff = now.addingTimeInterval(-Double(Self.logRecentDays) * 86_400)
+        var found: [URL: Date] = [:]
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
+        guard let walker = fm.enumerator(at: base, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { return [] }
+        var visited = 0
+        for case let url as URL in walker {
+            visited += 1
+            if visited > Self.logMaxEntriesVisited { break }
+            guard url.lastPathComponent.hasPrefix("rollout-"), url.pathExtension == "jsonl",
+                  let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true,
+                  let m = v.contentModificationDate, m >= cutoff else { continue }
+            found[url] = m
+        }
+        return found.sorted { $0.value > $1.value }.map { ($0.key, $0.value) }
+    }
+
+    /// The last `bytes` of a file, and whether that cut off the start of the file.
+    static func readTail(of file: URL, bytes: Int) -> (Data, Bool)? {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }
         defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        let chunk: UInt64 = 1_000_000
-        try? handle.seek(toOffset: size > chunk ? size - chunk : 0)
-        guard let data = try? handle.readToEnd(), let text = String(data: data, encoding: .utf8) else { return nil }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil, let data = try? handle.readToEnd() else { return nil }
+        return (data, start > 0)
+    }
 
-        for line in text.split(separator: "\n").reversed() where line.contains("\"rate_limits\"") {
-            guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { continue }
+    /// Usage events in a chunk of JSONL. Lines are split on bytes, so a cut in the middle of a
+    /// multi-byte character only spoils the first (partial) line, which is dropped. CRLF, a last line
+    /// without newline, corrupt lines and a half-written last line are all tolerated.
+    /// Events with a missing or invalid timestamp are skipped rather than treated as "now".
+    static func events(inTail data: Data, startsMidFile: Bool, now: Date) -> [(Date, ProviderSnapshot)] {
+        var bytes = data[...]
+        if startsMidFile {
+            guard let nl = bytes.firstIndex(of: 0x0A) else { return [] }
+            bytes = bytes[bytes.index(after: nl)...]
+        }
+        let marker = Array("\"rate_limits\"".utf8)
+        let latestAllowed = now.addingTimeInterval(3600)   // tolerate small clock differences only
+        var out: [(Date, ProviderSnapshot)] = []
+        for rawLine in bytes.split(separator: 0x0A, omittingEmptySubsequences: true) {
+            var line = rawLine
+            if line.last == 0x0D { line = line.dropLast() }
+            guard line.firstRange(of: marker) != nil,
+                  let obj = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  let eventTime = Parse.date(obj["timestamp"]), eventTime <= latestAllowed else { continue }
             let payload = obj["payload"] as? [String: Any]
             guard let limits = (payload?["rate_limits"] ?? obj["rate_limits"]) as? [String: Any] else { continue }
             if let id = limits["limit_id"] as? String, id != "codex" { continue }
-            let eventTime = Parse.date(obj["timestamp"]) ?? Date()
 
             let windows = ["primary", "secondary"].compactMap { key -> UsageWindow? in
-                guard let w = limits[key] as? [String: Any], let used = Parse.double(w["used_percent"]) else { return nil }
-                let minutes = Parse.int(w["window_minutes"])
-                var reset = Parse.date(w["resets_at"])
-                if reset == nil, let secs = Parse.double(w["resets_in_seconds"]) { reset = eventTime.addingTimeInterval(secs) }
+                guard let w = limits[key] as? [String: Any], let used = Parse.percent(w["used_percent"]) else { return nil }
+                let minutes = Parse.windowMinutes(Parse.int(w["window_minutes"]))
+                let reset = Parse.date(w["resets_at"]) ?? Parse.date(after: Parse.double(w["resets_in_seconds"]), from: eventTime)
                 return UsageWindow(kind: .from(minutes: minutes), usedPercent: used, resetsAt: reset, windowMinutes: minutes)
             }
             guard !windows.isEmpty else { continue }
-            return ProviderSnapshot(provider: .codex, windows: windows.sorted { $0.kind.sortOrder < $1.kind.sortOrder },
-                                    plan: (limits["plan_type"] as? String)?.capitalized,
-                                    source: .log(eventTime), fetchedAt: Date())
+            out.append((eventTime, ProviderSnapshot(provider: .codex, windows: windows.sorted { $0.kind.sortOrder < $1.kind.sortOrder },
+                                                    plan: (limits["plan_type"] as? String)?.capitalized,
+                                                    source: .log(eventTime), fetchedAt: now)))
         }
-        return nil
+        return out
     }
 }
