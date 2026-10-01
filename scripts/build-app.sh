@@ -3,7 +3,6 @@
 #
 # Optional environment variables:
 #   VERSION          app version (default 1.0.0)
-#   BUNDLE_ID        bundle identifier (default com.sean.aiusage)
 #   SIGN_IDENTITY    "Developer ID Application: Name (TEAMID)" — omit for ad-hoc signing
 #   NOTARY_PROFILE   keychain profile created with `xcrun notarytool store-credentials` — enables notarization
 set -euo pipefail
@@ -13,7 +12,16 @@ APP="AI Usage"          # display / bundle name
 EXE=AIUsage             # executable (SwiftPM product)
 AUTHOR="Sean"
 VERSION="${VERSION:-1.0.0}"
-BUNDLE_ID="${BUNDLE_ID:-com.sean.aiusage}"
+# The bundle ID is the app's identity: settings, the Keychain/WebKit data and the login item all hang
+# off it. It is fixed on purpose — an earlier build shipped as com.usagebar.app and left a second
+# identity (orphaned preferences, caches and a login item) behind.
+APP_BUNDLE_ID="com.sean.aiusage"
+if [[ -n "${BUNDLE_ID:-}" && "${BUNDLE_ID}" != "$APP_BUNDLE_ID" ]]; then
+  echo "✗ BUNDLE_ID=$BUNDLE_ID 는 쓸 수 없어요. 번들 ID는 $APP_BUNDLE_ID 로 고정돼 있어요." >&2
+  echo "  (다른 ID로 빌드하면 설정·로그인 정보·로그인 항목이 따로 생겨 고아 파일이 남아요.)" >&2
+  exit 1
+fi
+BUNDLE_ID="$APP_BUNDLE_ID"
 DIST=dist
 APPDIR="$DIST/$APP.app"
 SLUG="AI-Usage"

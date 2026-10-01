@@ -104,6 +104,47 @@ struct SelfTest {
         check(b.last?.equalLines == false, "Codex both → single weekly (only one window)")
         settings.barModes = saved
 
+        print("Login item: installed location check")
+        let home = "/Users/tester", tmp = "/var/folders/ab/cd1234/T/"
+        func installed(_ p: String) -> Bool { LoginItem.isInstalledLocation(p, home: home, tempDir: tmp) }
+        check(installed("/Applications/AI Usage.app"), "/Applications → allowed")
+        check(installed("/Applications/AI Usage.app/"), "trailing slash → allowed")
+        check(installed("/Applications/Utilities/AI Usage.app"), "/Applications subfolder → allowed")
+        check(installed("/Users/tester/Applications/AI Usage.app"), "~/Applications (absolute) → allowed")
+        check(installed("~/Applications/AI Usage.app"), "~/Applications (tilde) → allowed")
+        check(!installed("/private/var/folders/ab/cd1234/T/AppTranslocation/0F1E/d/AI Usage.app"), "App Translocation → refused")
+        check(!installed("/var/folders/xy/zz/T/AI Usage.app"), "/var/folders (symlink form) → refused")
+        check(!installed("/tmp/AI Usage.app"), "/tmp → refused")
+        check(!installed("/private/tmp/build/AI Usage.app"), "/private/tmp → refused")
+        check(!installed("/Users/tester/Library/Application Support/Claude/scratch-workspaces/abc/dist/UsageBar.app"), "scratch-workspaces → refused")
+        check(!installed("/Users/tester/AI-Usage/.build/release/AI Usage.app"), ".build → refused")
+        check(!installed("/Users/tester/Library/Developer/Xcode/DerivedData/X/Build/Products/Debug/AI Usage.app"), "DerivedData → refused")
+        check(!installed("/Volumes/AI Usage/AI Usage.app"), "mounted DMG (/Volumes) → refused")
+        check(!installed("/Users/tester/Downloads/AI Usage.app"), "~/Downloads → refused")
+        check(!installed("/Users/tester/AI-Usage/dist/AI Usage.app"), "project dist folder → refused")
+        check(!installed("/Users/tester/.Trash/AI Usage.app"), "Trash → refused")
+        check(!installed("/Applications/scratch-workspaces/AI Usage.app"), "refused folder inside /Applications → refused")
+        check(!installed("/Applications"), "not an .app → refused")
+        check(!LoginItem.isInstalledLocation("/Users/tester/mytmp/AI Usage.app", home: home, tempDir: "/Users/tester/mytmp/"),
+              "custom temp directory → refused")
+        check(LoginItem.setEnabled(true, bundlePath: "/private/tmp/AI Usage.app") != nil,
+              "turning on from a temp copy is refused with a message (no system call)")
+
+        print("Login item: launch-time decision")
+        let app = "/Applications/AI Usage.app"
+        func action(_ on: Bool, _ rec: String?, _ cur: String, _ inst: Bool) -> LoginItem.StartupAction {
+            LoginItem.startupAction(isEnabled: on, recordedPath: rec, currentPath: cur, currentIsInstalled: inst, home: home)
+        }
+        check(action(true, app, app, true) == .nothing, "on, recorded here → nothing")
+        check(action(true, app + "/", app, true) == .nothing, "on, same path written differently → nothing")
+        check(action(true, nil, app, true) == .reregister, "on, no record (older version) → re-register")
+        check(action(true, "/Users/tester/Library/Application Support/Claude/scratch-workspaces/a/dist/UsageBar.app", app, true) == .reregister,
+              "on, recorded at an old location → re-register here")
+        check(action(true, app, "/Users/tester/AI-Usage/dist/AI Usage.app", false) == .nothing,
+              "on, but running from a build copy → leave it alone")
+        check(action(false, app, app, true) == .forget, "off, record left over → forget record")
+        check(action(false, nil, app, true) == .nothing, "off, no record → nothing")
+
         print(failures == 0 ? "\nALL PASSED" : "\n\(failures) FAILED")
         exit(failures == 0 ? 0 : 1)
     }

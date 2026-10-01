@@ -52,15 +52,15 @@ final class AppSettings: ObservableObject {
     func connection(_ p: Provider) -> Connection { connections[p] ?? .none }
     func isConnected(_ p: Provider) -> Bool { connection(p) != .none }
 
+    /// Why the last "open at login" change didn't happen (shown under the toggle), or nil.
+    @Published var loginItemMessage: String?
+
+    /// Reading reflects the system state, so a refused change flips the toggle straight back.
     var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
+        get { LoginItem.isEnabled }
         set {
             objectWillChange.send()
-            do {
-                if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            } catch {
-                NSLog("AIUsage: launch at login change failed: \(error)")
-            }
+            loginItemMessage = LoginItem.setEnabled(newValue)
         }
     }
 }

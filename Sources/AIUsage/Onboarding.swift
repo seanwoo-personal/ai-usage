@@ -46,7 +46,9 @@ struct OnboardingView: View {
     @EnvironmentObject var settings: AppSettings
     let close: () -> Void
     @State private var step = 0
-    @State private var openAtLogin = true
+    /// On by default only where it can actually be registered (see LoginItem).
+    @State private var openAtLogin = LoginItem.isInstalledLocation(Bundle.main.bundlePath)
+    private let canOpenAtLogin = LoginItem.isInstalledLocation(Bundle.main.bundlePath)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,7 +95,7 @@ struct OnboardingView: View {
 
     private func next() {
         if step < 2 { step += 1; return }
-        if openAtLogin != settings.launchAtLogin { settings.launchAtLogin = openAtLogin }
+        if canOpenAtLogin && openAtLogin != settings.launchAtLogin { settings.launchAtLogin = openAtLogin }
         settings.onboarded = true
         close()
     }
@@ -182,6 +184,11 @@ struct OnboardingView: View {
 
             Toggle(L.t("Mac에 로그인하면 자동으로 실행", "Open automatically when I log in"), isOn: $openAtLogin)
                 .toggleStyle(.checkbox)
+                .disabled(!canOpenAtLogin)
+            if !canOpenAtLogin {
+                Text(L.t("앱을 응용 프로그램 폴더로 옮기면 켤 수 있어요.", "Move the app to your Applications folder to turn this on."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
         }
     }

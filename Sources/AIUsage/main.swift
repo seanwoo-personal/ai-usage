@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] in self?.redraw() }
             .store(in: &bag)
 
+        LoginItem.reconcileAtLaunch()
         redraw()
         store.start()
 

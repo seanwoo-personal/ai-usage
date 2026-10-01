@@ -44,5 +44,8 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
 - 서명 인증서가 없어 임시(ad-hoc) 서명이지만 강화된 런타임(`--options runtime`)은 켜져 있다. 빌드 후
   `codesign -dvv "dist/AI Usage.app"`의 flags에 `runtime`이 있어야 한다.
 - main 브랜치는 강제 푸시·삭제가 막혀 있다(관리자 포함). 기록을 고쳐 쓰지 말고 새 커밋으로 고친다.
+- 번들 ID는 `com.sean.aiusage`로 고정이다. `build-app.sh`는 다른 `BUNDLE_ID`가 주어지면 빌드를 거부한다.
+- "로그인하면 자동 실행"은 `/Applications`·`~/Applications`에서 실행 중일 때만 켤 수 있다(`LoginItem.swift`).
+  빌드 폴더·DMG·임시 폴더에서 켜면 그 경로가 로그인 항목에 남아 깨지기 때문. 테스트할 땐 설치본에서 켠다.
 - 서명 인증서가 없어 임시(ad-hoc) 서명이다. 배포는 한 줄 설치가 기본이고, DMG는 "그래도 열기" 절차가 필요하다.
 - 웹 로그인 팝업(Google 등)은 별도 창으로 열어야 한다. 로그인 창을 팝업 주소로 이동시키면 흰 화면에서 멈춘다.

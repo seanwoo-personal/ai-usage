@@ -337,6 +337,12 @@ struct SettingsSection: View {
             Toggle(L.t("메뉴 막대에 리셋까지 남은 시간 표시", "Show time to reset in menu bar"), isOn: $settings.showResetInBar)
             Toggle(L.t("Mac에 로그인하면 자동으로 실행", "Open at login"), isOn: Binding(
                 get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 }))
+            if let message = settings.loginItemMessage {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Text("AI Usage \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · " + L.t("만든 사람: Sean", "Made by Sean"))
                 .font(.caption2)
