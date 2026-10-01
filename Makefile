@@ -2,7 +2,7 @@
 
 docs:
 	python3 -B scripts/check_docs.py
-	python3 -B -m unittest discover -s scripts -p 'test_check_docs.py' -v
+	python3 -B -m unittest discover -s scripts -p 'test_*.py' -v
 
 test:
 	./scripts/selftest.sh

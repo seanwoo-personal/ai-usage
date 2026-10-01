@@ -32,3 +32,8 @@ See [entry guide](../CLAUDE.md), [architecture](../docs/architecture.md), [revie
 Use [result template](result-template.json) for each actual trial. Null means unmeasured; pending is not passed.
 Warning: agent logs can contain private prompts or secrets. Store only task-specific measurements and sanitized evidence.
 No before/after agent benchmark has been completed by adding this directory.
+
+## Swift profile
+
+See [scoring rules](swift-profile.md) and [recorded inspection tasks](agent-results.json).
+The recorded tasks used the existing session; they are not a fresh-context benchmark.

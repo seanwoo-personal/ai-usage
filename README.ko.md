@@ -30,3 +30,5 @@ make check
 
 [MIT](LICENSE) © 2026 Sean Woo. Anthropic·OpenAI와 제휴하지 않은 독립 프로젝트입니다.
 상표와 아이콘 출처는 [사용 안내](docs/user-guide.ko.md)에 보존돼 있습니다.
+
+AI 작업 준비도: [Swift 보완 기준과 한계](evals/swift-profile.md), [원본·보완 점수](evals/readiness-score.json).

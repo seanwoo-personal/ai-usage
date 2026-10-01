@@ -1,0 +1,58 @@
+{
+  "profile": "swift-equivalence-v1",
+  "original_total": 95,
+  "adapted_total": 100,
+  "categories": {
+    "A": 15,
+    "B": 20,
+    "C": 20,
+    "D": 15,
+    "E": 15,
+    "F": 10,
+    "G": 5
+  },
+  "adjustments": {
+    "D": 2,
+    "E": 1,
+    "F": 2
+  },
+  "limitations": [
+    "Static readiness score, not CI success or product quality.",
+    "Hook availability is checked; installation is opt-in.",
+    "Agent record existence does not demonstrate productivity improvement."
+  ],
+  "measured_at": "2026-10-01T15:21:19.290634+00:00",
+  "original_scorer_sha256": "49f3cc5691a1811631c0f05a8f8f39995dab092a2c45e430a5e6ccfa6a4a6561",
+  "source_base": "6fe8d6035b7f180eb52bf5e5a4fff7b5a69ae761",
+  "measurement_scope": "Working tree, including uncommitted changes at measurement time",
+  "original_categories": {
+    "A": {
+      "score": 15,
+      "max": 15
+    },
+    "B": {
+      "score": 20,
+      "max": 20
+    },
+    "C": {
+      "score": 20,
+      "max": 20
+    },
+    "D": {
+      "score": 13,
+      "max": 15
+    },
+    "E": {
+      "score": 14,
+      "max": 15
+    },
+    "F": {
+      "score": 8,
+      "max": 10
+    },
+    "G": {
+      "score": 5,
+      "max": 5
+    }
+  }
+}

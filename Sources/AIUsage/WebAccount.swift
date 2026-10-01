@@ -343,7 +343,7 @@ final class LoginWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUID
         state.loading = true
         webView.load(URLRequest(url: account.loginURL))
         poll = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.checkLogin() }
+            Task { @MainActor [weak self] in await self?.checkLogin() }
         }
     }
 

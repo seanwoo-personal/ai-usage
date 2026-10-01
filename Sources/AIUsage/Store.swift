@@ -123,7 +123,7 @@ final class UsageStore: ObservableObject {
         refreshAll()
         scheduleRefresh()
         clockTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.now = self?.clock() ?? Date() }
+            Task { @MainActor [weak self] in self?.now = self?.clock() ?? Date() }
         }
         settings.$refreshMinutes.dropFirst().removeDuplicates()
             .sink { [weak self] _ in DispatchQueue.main.async { self?.scheduleRefresh() } }
@@ -138,7 +138,7 @@ final class UsageStore: ObservableObject {
     private func scheduleRefresh() {
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(AppSettings.validRefreshMinutes(settings.refreshMinutes)) * 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshAll() }
+            Task { @MainActor [weak self] in self?.refreshAll() }
         }
     }
 

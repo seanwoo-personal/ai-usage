@@ -45,7 +45,7 @@ final class Updater: ObservableObject {
     func start() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.checkIfDue() }
         timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkIfDue() }
+            Task { @MainActor [weak self] in self?.checkIfDue() }
         }
     }
 

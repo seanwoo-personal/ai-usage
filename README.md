@@ -62,3 +62,5 @@ See [contributing](CONTRIBUTING.md), [agent guide](CLAUDE.md),
 
 [MIT](LICENSE) © 2026 Sean Woo. Independent project; not affiliated with Anthropic or OpenAI.
 Claude and ChatGPT branding belongs to its respective owners; icon attribution is in the [user guide](docs/user-guide.md).
+
+Readiness: [Swift-specific rules and limitations](evals/swift-profile.md), [original and adapted scores](evals/readiness-score.json).
