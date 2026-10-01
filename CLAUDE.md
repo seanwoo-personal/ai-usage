@@ -10,13 +10,16 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
 1. **버전 정하기**: 마지막 릴리스는 `gh release list --repo seanwoo-personal/ai-usage --limit 1`로 확인한다.
    기능 추가는 minor(1.1.0 → 1.2.0), 버그 수정만 있으면 patch(1.1.0 → 1.1.1). 애매하면 사용자에게 묻는다.
 2. **테스트**: `./scripts/selftest.sh` → `ALL PASSED`가 아니면 멈추고 고친다.
+   **변경 기록**: `CHANGELOG.md`의 `## [Unreleased]` 내용을 `## [<버전>] - <날짜>`로 옮기고 맨 아래 비교 링크를 추가한다.
 3. **빌드**: `rm -rf .build && VERSION=<버전> ./scripts/build-app.sh`
    - 결과: `dist/AI Usage.app`, `dist/AI-Usage-<버전>.dmg`, `dist/AI-Usage-<버전>.zip`, `dist/AI-Usage.zip`
    - `.build`를 지우는 이유: 폴더를 옮기거나 경로가 바뀌면 이전 모듈 캐시 때문에 빌드가 깨진다.
 4. **로컬 설치 확인**: 테스트 모드로 방금 빌드한 ZIP을 실제 위치에 설치해 본다.
    `AIUSAGE_TEST_MODE=1 AIUSAGE_ZIP_URL="file://$PWD/dist/AI-Usage.zip" AIUSAGE_SHA256="$(awk '{print $1}' dist/AI-Usage.zip.sha256)" bash scripts/install.sh`
    → 앱이 열리고 메뉴 막대에 값이 나오는지 확인. (`selftest.sh`가 설치 실패 상황은 격리된 폴더에서 따로 검사한다.)
-5. **커밋·푸시**: 커밋 메시지는 한국어, 끝에 `Co-Authored-By` 줄. 이 저장소의 git 이메일은
+5. **커밋·푸시**: 커밋 메시지는 영어 [Conventional Commits](https://www.conventionalcommits.org/) 형식으로 짧게 쓴다.
+   제목은 50자 안팎(`fix(installer): quit the app that launched the update`, 릴리스는 `chore(release): v1.2.2`),
+   자세한 내용은 본문에. GitHub 파일 목록에 제목이 그대로 보이기 때문. 끝에 `Co-Authored-By` 줄. 이 저장소의 git 이메일은
    `211646405+seanwoo-personal@users.noreply.github.com`(회사 메일이 공개 기록에 남지 않게). 바꾸지 않는다.
 6. **GitHub 릴리스**: 반드시 `dist/AI-Usage.zip`과 `dist/AI-Usage.zip.sha256`을 함께 올린다. 설치 스크립트와 앱의
    자동 업데이트가 `releases/download/<태그>/` 에서 이 두 파일을 받아 해시를 확인하기 때문. 앱 버전과 태그(vX.Y.Z)가
@@ -25,7 +28,7 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
    그래서 초안으로 올려 파일을 확인한 다음 발행한다. 잘못 발행했으면 고치지 말고 다음 patch 버전을 낸다.
    ```bash
    gh release create v<버전> dist/AI-Usage.zip dist/AI-Usage.zip.sha256 dist/AI-Usage-<버전>.dmg --draft \
-     --repo seanwoo-personal/ai-usage --title "AI Usage <버전>" --notes "<한국어 변경 사항>"
+     --repo seanwoo-personal/ai-usage --title "AI Usage <버전>" --notes "<영어 변경 사항(CHANGELOG 그대로) + 한국어 요약>"
    gh release view v<버전> --repo seanwoo-personal/ai-usage --json assets --jq '.assets[].name'   # 세 파일 확인
    gh release edit v<버전> --repo seanwoo-personal/ai-usage --draft=false
    ```
@@ -35,6 +38,14 @@ macOS 메뉴 막대 앱(SwiftPM, Xcode 없이 Command Line Tools로 빌드). 소
    /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "/Applications/AI Usage.app/Contents/Info.plist"
    ```
 8. 개인 환경에서 추가로 할 일이 있으면 `CLAUDE.local.md`를 따른다.
+
+## 저장소 문서
+
+- `README.md`(영어, 기본)와 `README.ko.md`(한국어)는 내용을 함께 맞춘다. 화면 캡처는 `docs/images/`
+  (`popover.png` 영어, `popover-ko.png` 한국어, `menubar.png`, `icon.png`). 캡처는 사용자 화면에 띄우지 않고
+  가짜 데이터로 화면 밖에서 렌더링해 만든다.
+- 사용자에게 보이는 변경은 `CHANGELOG.md`의 `Unreleased`에 쌓는다. `SECURITY.md`, `CONTRIBUTING.md`,
+  `.github/` 이슈·PR 양식이 있다.
 
 ## 알아둘 점
 
