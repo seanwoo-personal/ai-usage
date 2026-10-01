@@ -365,28 +365,30 @@ struct UpdateBanner: View {
 
     var body: some View {
         if let release = updater.available {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(L.t("새 버전 \(release.version)이 나왔어요", "Version \(release.version) is available"),
-                      systemImage: "arrow.down.circle")
-                    .font(.system(size: 12.5, weight: .semibold))
-                if updater.installing {
-                    HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                // One row: what's new on the left, actions on the right.
+                HStack(spacing: 8) {
+                    Label(L.t("새 버전 \(release.version)이 나왔어요", "Version \(release.version) is available"),
+                          systemImage: "arrow.down.circle")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if updater.installing {
                         ProgressView().controlSize(.small)
-                        Text(L.t("확인하고 설치하는 중이에요. 끝나면 앱이 다시 열려요.", "Checking and installing. The app reopens when done."))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                } else {
-                    HStack(spacing: 8) {
+                    } else {
+                        Button(L.t("바뀐 점", "What's new")) { NSWorkspace.shared.open(release.page) }
+                            .buttonStyle(.link).font(.caption)
                         Button(L.t("업데이트", "Update")) { updater.install() }
                             .buttonStyle(.borderedProminent).controlSize(.small)
                             .disabled(!updater.canInstall)
-                        Button(L.t("바뀐 점", "What's new")) { NSWorkspace.shared.open(release.page) }
-                            .buttonStyle(.link).font(.caption)
                     }
-                    if !updater.canInstall {
-                        Text(L.t("응용 프로그램 폴더에 설치된 앱에서 업데이트할 수 있어요.", "Updates run from the app in your Applications folder."))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                }
+                if updater.installing {
+                    Text(L.t("확인하고 설치하는 중이에요. 끝나면 앱이 다시 열려요.", "Checking and installing. The app reopens when done."))
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if !updater.canInstall {
+                    Text(L.t("응용 프로그램 폴더에 설치된 앱에서 업데이트할 수 있어요.", "Updates run from the app in your Applications folder."))
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 if let problem = updater.problem {
                     Text(problem).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)

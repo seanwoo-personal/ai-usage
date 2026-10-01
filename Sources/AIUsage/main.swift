@@ -33,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         redraw()
         store.start()
         updater.start()
+        // Diagnostics: AIUSAGE_DEBUG_AUTOUPDATE=1 checks and installs an available update without any UI.
+        if ProcessInfo.processInfo.environment["AIUSAGE_DEBUG_AUTOUPDATE"] == "1" {
+            Task { await updater.check(); updater.install() }
+        }
 
         AppActions.showOnboarding = { [weak self] in
             guard let self else { return }

@@ -14,7 +14,8 @@
 # proves the files weren't changed after signing, not who made them (no Apple Developer ID yet).
 #
 # Test-only settings (ignored unless AIUSAGE_TEST_MODE=1):
-#   AIUSAGE_ZIP_URL (file:// allowed), AIUSAGE_SHA256, AIUSAGE_INSTALL_DIR, AIUSAGE_NO_OPEN=1, AIUSAGE_NO_QUIT=1
+#   AIUSAGE_ZIP_URL (file:// allowed), AIUSAGE_SHA256, AIUSAGE_INSTALL_DIR, AIUSAGE_NO_OPEN=1, AIUSAGE_NO_QUIT=1,
+#   AIUSAGE_PROCESS_NAME (which process counts as "the running app")
 set -euo pipefail
 
 REPO="seanwoo-personal/ai-usage"
@@ -27,7 +28,7 @@ fail() { printf '\n✗ %s\n' "$*" >&2; exit 1; }
 
 TEST_MODE="${AIUSAGE_TEST_MODE:-0}"
 if [[ "$TEST_MODE" != "1" ]]; then
-  for v in AIUSAGE_ZIP_URL AIUSAGE_SHA256 AIUSAGE_INSTALL_DIR AIUSAGE_NO_OPEN AIUSAGE_NO_QUIT; do
+  for v in AIUSAGE_ZIP_URL AIUSAGE_SHA256 AIUSAGE_INSTALL_DIR AIUSAGE_NO_OPEN AIUSAGE_NO_QUIT AIUSAGE_PROCESS_NAME; do
     [[ -n "${!v:-}" ]] && fail "$v 는 테스트 모드(AIUSAGE_TEST_MODE=1)에서만 쓸 수 있어요."
   done
 fi
@@ -156,14 +157,23 @@ ditto "$NEW" "$STAGE" || { rm -rf "$STAGE"; fail "새 앱을 복사하지 못했
 check_app "$STAGE"
 
 # ── 5. swap (only now is the running app touched) ───────────────────────────────────────
+# `-a`: also match our own ancestors. When the app's built-in updater runs this script, the app is
+# our parent, and pgrep/pkill skip ancestors by default — the app would keep running the old code.
+# A plain quit signal is used instead of AppleScript, so no "control another app" permission is asked.
+PROC="${AIUSAGE_PROCESS_NAME:-$EXE}"
 WAS_RUNNING=0
-if [[ "${AIUSAGE_NO_QUIT:-0}" != "1" ]] && pgrep -x "$EXE" >/dev/null 2>&1; then
+if [[ "${AIUSAGE_NO_QUIT:-0}" != "1" ]] && pgrep -a -x "$PROC" >/dev/null 2>&1; then
   WAS_RUNNING=1
   say "• 실행 중인 AI Usage를 종료하는 중…"
-  osascript -e 'quit app "AI Usage"' >/dev/null 2>&1 || true
-  for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x "$EXE" >/dev/null 2>&1 || break; sleep 0.5; done
-  pkill -x "$EXE" >/dev/null 2>&1 || true
+  pkill -TERM -a -x "$PROC" >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -a -x "$PROC" >/dev/null 2>&1 || break; sleep 0.5; done
+  if pgrep -a -x "$PROC" >/dev/null 2>&1; then
+    pkill -KILL -a -x "$PROC" >/dev/null 2>&1 || true
+    sleep 0.5
+  fi
+  pgrep -a -x "$PROC" >/dev/null 2>&1 && restore_and_fail_early=1
 fi
+[[ "${restore_and_fail_early:-0}" == "1" ]] && { rm -rf "$STAGE"; fail "실행 중인 AI Usage를 종료하지 못했어요. 기존 앱은 그대로 두었어요."; }
 
 restore_and_fail() {
   rm -rf "$DEST/$APP.tmp-fail" 2>/dev/null || true
@@ -184,6 +194,7 @@ rm -rf "$BACKUP"
 
 say ""
 say "✓ 설치가 끝났어요: $DEST/$APP (버전 $NEW_VERSION)"
+# Run the updater's reopen detached from whatever started us, then confirm the new copy is running.
 if [[ "${AIUSAGE_NO_OPEN:-0}" != "1" ]]; then
   if open "$DEST/$APP"; then
     say "  앱을 열었어요. 화면 오른쪽 위 메뉴 막대에 아이콘이 보이는지 확인해 주세요."

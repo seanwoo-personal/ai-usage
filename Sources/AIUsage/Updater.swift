@@ -123,6 +123,9 @@ final class Updater: ObservableObject {
         }
     }
 
+    /// Test hook: pretend a release was found (for rendering checks).
+    func testOffer(_ release: Release) { available = release }
+
     // MARK: - Pure helpers (tested)
 
     /// "1.10.0" > "1.9.3". Non-numeric parts count as 0; missing parts as 0.

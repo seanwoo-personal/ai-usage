@@ -109,6 +109,25 @@ if [[ "$codes" == *0* ]] && codesign --verify --strict "$DEST/AI Usage.app" 2>/d
   ok "two installers at once → a valid app, no leftovers (exit codes $codes)"
 else bad "two installers at once (exit codes $codes)"; fi
 
+# The app's own updater runs this script as its child: the running app is then our *parent*.
+# A fake app process (a renamed shell) starts the installer and must be quit by it; the installer
+# carries on and finishes on its own (its output file is the result).
+fresh_dest
+printf '#include <stdlib.h>\n#include <unistd.h>\nint main(int c, char **v) { int r = system(v[1]); sleep(60); return r; }\n' > "$T/fake.c"
+cc -o "$T/AIUsageFakeApp" "$T/fake.c" 2>/dev/null
+"$T/AIUsageFakeApp" "AIUSAGE_TEST_MODE=1 AIUSAGE_ZIP_URL='file://$T/fx/good.zip' AIUSAGE_SHA256='$(sha "$T/fx/good.zip")' \
+  AIUSAGE_INSTALL_DIR='$DEST' AIUSAGE_NO_OPEN=1 AIUSAGE_PROCESS_NAME=AIUsageFakeApp bash '$INSTALL' > '$T/out-parent.txt' 2>&1" 2>/dev/null &
+FAKE=$!
+disown "$FAKE" 2>/dev/null
+for _ in $(seq 1 80); do grep -qE "설치가 끝났어요|✗" "$T/out-parent.txt" 2>/dev/null && break; sleep 0.5; done
+sleep 0.5
+if grep -q "설치가 끝났어요" "$T/out-parent.txt" && grep -q "종료하는 중" "$T/out-parent.txt" \
+   && ! kill -0 "$FAKE" 2>/dev/null && ! old_kept && no_litter; then
+  ok "updater case: the running app is the installer's parent → it is quit, then replaced"
+else
+  bad "updater case: parent app was not quit or install didn't finish"; kill -9 "$FAKE" 2>/dev/null; cat "$T/out-parent.txt"
+fi
+
 # Test-only settings are refused outside test mode.
 if AIUSAGE_ZIP_URL="file://$T/fx/good.zip" bash "$INSTALL" >"$T/out.txt" 2>&1; then
   bad "local file URL accepted outside test mode"
