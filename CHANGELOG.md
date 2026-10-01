@@ -5,9 +5,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-02
+
 ### Changed
-- README rewritten in English with a Korean translation (`README.ko.md`), screenshots and an independence notice.
-- Added `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, and issue / pull request templates.
+- Optimizations. / 최적화.
 
 ## [1.2.1] - 2026-10-01
 
@@ -66,7 +67,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.1.1...v1.1.2
