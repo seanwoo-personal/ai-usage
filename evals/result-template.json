@@ -1,0 +1,14 @@
+{
+  "task_id": null,
+  "commit": null,
+  "model": null,
+  "started_at": null,
+  "finished_at": null,
+  "tool_calls": null,
+  "human_clarifications": null,
+  "correctness": "pending",
+  "rework_count": null,
+  "verification_commands": [],
+  "evidence": [],
+  "limitations": "Template only; not an evaluation result."
+}

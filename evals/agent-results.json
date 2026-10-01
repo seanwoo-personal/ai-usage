@@ -1,0 +1,50 @@
+{
+  "record_type": "existing-session-source-inspection",
+  "date": "2026-10-02",
+  "agent": "Codex",
+  "model": null,
+  "source_base": "6fe8d6035b7f180eb52bf5e5a4fff7b5a69ae761",
+  "working_tree": "Includes pending guide and Swift weak-capture edits",
+  "fresh_context": false,
+  "independent_review": false,
+  "timing_measured": false,
+  "limitations": [
+    "Self-reviewed source-inspection tasks only.",
+    "Not a controlled benchmark or proof of improved productivity.",
+    "Application tests are separate evidence, not agent outcome counts."
+  ],
+  "tasks": [
+    {
+      "id": "navigation",
+      "prompt": "Identify the 429/reconnect change points and checks.",
+      "answer": "UsageStore in Store.swift enforces retry deadlines; RetryPolicy in Models.swift parses and bounds Retry-After. StoreTests in Tests/store_tests.swift verifies menu, timer, manual refresh and reconnect cannot bypass the wait, then exactly one retry occurs at the deadline.",
+      "evidence": [
+        "Sources/AIUsage/Store.swift",
+        "Sources/AIUsage/Models.swift",
+        "Tests/store_tests.swift"
+      ],
+      "self_review": "acceptance criteria met"
+    },
+    {
+      "id": "parser",
+      "prompt": "Determine whether Boolean usage numbers require a new rejection change.",
+      "answer": "No edit required: Parse.double in Models.swift rejects CFBoolean before NSNumber conversion. Tests/regression.swift asserts true/false rejection and rejects Codex used_percent=true.",
+      "evidence": [
+        "Sources/AIUsage/Models.swift",
+        "Tests/regression.swift"
+      ],
+      "self_review": "acceptance criteria met"
+    },
+    {
+      "id": "credential-boundary",
+      "prompt": "Explain what disconnect removes.",
+      "answer": "UsageStore invalidates the connection generation, clears the card and login window, and delegates removal of app-owned data to LiveBackend. Claude CLI disconnect resets only its app token cache; CLI-owned credentials remain untouched. Shared web sign-in data is cleared only when the disconnected connection was web and no other web connection remains. StoreTests covers both shared sign-in retention and CLI cache-only removal.",
+      "evidence": [
+        "Sources/AIUsage/Store.swift",
+        "Sources/AIUsage/Backend.swift",
+        "Tests/store_tests.swift"
+      ],
+      "self_review": "acceptance criteria met"
+    }
+  ]
+}

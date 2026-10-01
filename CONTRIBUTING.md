@@ -33,3 +33,13 @@ docs: add Korean README
 ```
 
 Keep the subject under about 50 characters; put details in the body.
+
+## Navigation and validation
+
+Start with [CLAUDE.md](CLAUDE.md) and the [change impact map](docs/architecture.md).
+`make check` runs docs validation, Swift build and isolated tests; `make docs` is sufficient for prose-only changes.
+Python 3.9+ is needed for the documentation checker (standard library only).
+Optionally run `make hooks` to opt this clone into the checked-in pre-push docs check;
+this replaces the clone's existing core.hooksPath setting, so inspect it first if you already use hooks.
+Follow [review requirements](docs/review.md). CI success and reviewer approval are distinct evidence.
+AI task evaluations are described in [evals/README.md](evals/README.md); never substitute unit-test counts for agent outcomes.
