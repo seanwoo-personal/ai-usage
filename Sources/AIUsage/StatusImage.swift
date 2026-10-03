@@ -107,3 +107,64 @@ enum StatusImage {
         return image
     }
 }
+
+/// The optional system section (CPU · RAM · SSD · network), drawn like Stats: a small label on top,
+/// the value below. Each block has a fixed width so the menu bar doesn't shift as numbers change.
+enum SystemStatusImage {
+    enum Metric: String, CaseIterable, Identifiable {
+        case cpu, memory, disk, network
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .cpu: return "CPU"
+            case .memory: return "RAM"
+            case .disk: return "SSD"
+            case .network: return L.t("네트워크", "Network")
+            }
+        }
+    }
+
+    static func render(_ r: SystemMonitor.Reading, metrics: [Metric], height: CGFloat = 22) -> NSImage? {
+        guard !metrics.isEmpty else { return nil }
+        let ink = NSColor.black
+        let labelAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 8.5, weight: .semibold), .foregroundColor: ink.withAlphaComponent(0.85),
+        ]
+        let valueAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold), .foregroundColor: ink,
+        ]
+        let netAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold), .foregroundColor: ink,
+        ]
+        let gap: CGFloat = 9
+        let percentWidth = ceil(NSAttributedString(string: "100%", attributes: valueAttrs).size().width)
+        let netWidth = ceil(NSAttributedString(string: "↓ 999 KB/s", attributes: netAttrs).size().width)
+
+        var parts: [(top: NSAttributedString, bottom: NSAttributedString, width: CGFloat)] = []
+        for m in metrics {
+            switch m {
+            case .network:
+                parts.append((NSAttributedString(string: "↑ " + SystemMath.rateText(r.upload), attributes: netAttrs),
+                              NSAttributedString(string: "↓ " + SystemMath.rateText(r.download), attributes: netAttrs), netWidth))
+            default:
+                let v = m == .cpu ? r.cpu : m == .memory ? r.memory : r.disk
+                let label = NSAttributedString(string: m.label, attributes: labelAttrs)
+                parts.append((label, NSAttributedString(string: SystemMath.percentText(v), attributes: valueAttrs),
+                              max(percentWidth, ceil(label.size().width))))
+            }
+        }
+        let width = parts.reduce(0) { $0 + $1.width } + gap * CGFloat(parts.count - 1) + 2
+        let image = NSImage(size: NSSize(width: ceil(width), height: height), flipped: false) { _ in
+            var x: CGFloat = 1
+            for p in parts {
+                let isNet = p.bottom.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == netAttrs[.font] as? NSFont
+                p.top.draw(at: NSPoint(x: x, y: isNet ? 10.5 : 11))
+                p.bottom.draw(at: NSPoint(x: x, y: isNet ? 0 : -0.5))
+                x += p.width + gap
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+}

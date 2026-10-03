@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var store = UsageStore(settings: settings)
     private let updater = Updater()
     private var statusItem: NSStatusItem!
+    /// Optional second item for CPU · RAM · SSD · network (Settings → system monitor).
+    private var systemItem: NSStatusItem?
+    private let monitor = SystemMonitor()
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
 
@@ -16,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover(_:))
         statusItem.button?.imagePosition = .imageOnly
+        statusItem.autosaveName = "AIUsage.usage"   // keeps the position after ⌘-dragging
 
         let host = NSHostingController(rootView: PopoverView().environmentObject(store).environmentObject(settings).environmentObject(updater))
         host.sizingOptions = .preferredContentSize
@@ -28,6 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .sink { [weak self] in self?.redraw() }
             .store(in: &bag)
+        settings.objectWillChange.map { _ in () }
+            .merge(with: monitor.objectWillChange.map { _ in () })
+            .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
+            .sink { [weak self] in self?.updateSystemItem() }
+            .store(in: &bag)
+        updateSystemItem()
 
         LoginItem.reconcileAtLaunch()
         redraw()
@@ -57,8 +67,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .map { "\($0.displayName) \($1.bottom) · \($1.top)" }.joined(separator: "\n")
     }
 
+    /// Shows, updates or removes the system item, and runs the monitor only while it's shown.
+    private func updateSystemItem() {
+        let metrics = settings.orderedSystemMetrics
+        guard settings.showSystem, !metrics.isEmpty else {
+            if let item = systemItem { NSStatusBar.system.removeStatusItem(item); systemItem = nil }
+            if monitor.isRunning { monitor.stop() }
+            return
+        }
+        if systemItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            item.autosaveName = "AIUsage.system"
+            item.button?.target = self
+            item.button?.action = #selector(togglePopover(_:))
+            item.button?.imagePosition = .imageOnly
+            systemItem = item
+        }
+        if !monitor.isRunning { monitor.start() }
+        let r = monitor.reading
+        systemItem?.button?.image = SystemStatusImage.render(r, metrics: metrics)
+        systemItem?.button?.toolTip = "CPU \(SystemMath.percentText(r.cpu)) · RAM \(SystemMath.percentText(r.memory)) · SSD \(SystemMath.percentText(r.disk))\n↑ \(SystemMath.rateText(r.upload))  ↓ \(SystemMath.rateText(r.download))"
+    }
+
     @objc private func togglePopover(_ sender: Any?) {
-        guard let button = statusItem.button else { return }
+        guard let button = (sender as? NSStatusBarButton) ?? statusItem.button else { return }
         if popover.isShown {
             popover.performClose(sender)
         } else {

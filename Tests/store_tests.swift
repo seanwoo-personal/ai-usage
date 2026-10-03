@@ -387,3 +387,51 @@ enum UpdaterTests {
         check(rel("not json") == nil, "garbage is ignored")
     }
 }
+
+enum SystemTests {
+    static func run() {
+        print("System monitor calculations")
+        typealias T = SystemMath.CPUTicks
+        check(SystemMath.cpuUsage(from: T(user: 100, system: 50, idle: 850, nice: 0), to: T(user: 130, system: 70, idle: 1000, nice: 0)) == 25,
+              "CPU: 50 busy of 200 ticks → 25%")
+        check(SystemMath.cpuUsage(from: T(user: 1, system: 1, idle: 1, nice: 0), to: T(user: 1, system: 1, idle: 1, nice: 0)) == nil, "CPU: no time passed → no reading")
+        check(SystemMath.cpuUsage(from: T(user: 10, system: 1, idle: 1, nice: 0), to: T(user: 5, system: 1, idle: 9, nice: 0)) == nil, "CPU: counters went backwards → no reading")
+
+        let gb: UInt64 = 1 << 30, page: UInt64 = 16_384
+        func pages(_ bytes: UInt64) -> UInt64 { bytes / page }
+        let m = SystemMath.Memory(pageSize: page, active: pages(8 * gb), inactive: pages(6 * gb), speculative: pages(1 * gb),
+                                  wired: pages(3 * gb), compressed: pages(2 * gb), purgeable: pages(1 * gb), external: pages(1 * gb),
+                                  physical: 24 * gb)
+        check(SystemMath.memoryUsedPercent(m).map { abs($0 - 75) < 0.01 } == true, "RAM: Stats formula (18 of 24 GB) → 75%")
+        var free = m; free.purgeable = pages(30 * gb)
+        check(SystemMath.memoryUsedPercent(free) == 0, "RAM: more reclaimable than used → 0%, not negative")
+        var huge = m; huge.active = .max
+        check(SystemMath.memoryUsedPercent(huge) == nil, "RAM: overflowing counters → no reading (no crash)")
+        var noRam = m; noRam.physical = 0
+        check(SystemMath.memoryUsedPercent(noRam) == nil, "RAM: unknown total → no reading")
+
+        check(SystemMath.diskUsedPercent(total: 1000, available: 330) == 67, "SSD: 670 of 1000 used → 67%")
+        check(SystemMath.diskUsedPercent(total: 0, available: 0) == nil, "SSD: zero size → no reading")
+        check(SystemMath.diskUsedPercent(total: 100, available: 200) == nil, "SSD: more free than total → no reading")
+
+        typealias N = SystemMath.NetCounters
+        let r = SystemMath.networkRate(from: N(sent: 1000, received: 5000), to: N(sent: 3000, received: 9000), seconds: 2)
+        check(r?.up == 1000 && r?.down == 2000, "network: bytes per second from counter deltas")
+        check(SystemMath.networkRate(from: N(sent: 9000, received: 9000), to: N(sent: 10, received: 10), seconds: 2) == nil,
+              "network: counters reset (sleep, interface change) → no reading, not a huge number")
+        check(SystemMath.networkRate(from: N(sent: 0, received: 0), to: N(sent: 10, received: 10), seconds: 0.01) == nil,
+              "network: too short an interval → no reading")
+
+        check(SystemMath.rateText(0) == "0 KB/s", "speed text: 0 KB/s")
+        check(SystemMath.rateText(999 * 1024) == "999 KB/s", "speed text: 999 KB/s")
+        check(SystemMath.rateText(1.4 * 1024 * 1024) == "1.4 MB/s", "speed text: 1.4 MB/s")
+        check(SystemMath.rateText(120 * 1024 * 1024) == "120 MB/s", "speed text: 120 MB/s")
+        check(SystemMath.rateText(2.5 * 1024 * 1024 * 1024) == "2.5 GB/s", "speed text: 2.5 GB/s")
+        check(SystemMath.rateText(nil) == "– KB/s" && SystemMath.rateText(.nan) == "– KB/s" && SystemMath.rateText(-5) == "– KB/s",
+              "speed text: missing or invalid → dash")
+        check(SystemMath.percentText(nil) == "–" && SystemMath.percentText(.infinity) == "–" && SystemMath.percentText(150) == "100%",
+              "percent text: missing, infinite and out-of-range values are safe")
+        check(SystemStatusImage.render(.init(), metrics: SystemStatusImage.Metric.allCases) != nil, "menu bar image draws with no readings yet")
+        check(SystemStatusImage.render(.init(), metrics: []) == nil, "no metrics chosen → no system item")
+    }
+}

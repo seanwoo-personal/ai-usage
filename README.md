@@ -36,6 +36,7 @@
 - **Clear when something's wrong**: every problem comes with one sentence and one button (log in again, try again). Last known values stay visible.
 - **Respects rate limits**: honours the server's `Retry-After` and never hammers the API.
 - **Updates itself**: checks once a day; one click installs the new version with the same checks as a fresh install.
+- **System status too (optional)**: CPU, RAM, SSD and network speed in a second menu bar item, measured the same way as [Stats](https://github.com/exelban/stats). Off by default.
 - **Small and private**: no account, no analytics, no server of its own.
 
 ## Install and use
@@ -62,5 +63,6 @@ See [contributing](CONTRIBUTING.md), [agent guide](CLAUDE.md),
 
 [MIT](LICENSE) © 2026 Sean Woo. Independent project; not affiliated with Anthropic or OpenAI.
 Claude and ChatGPT branding belongs to its respective owners; icon attribution is in the [user guide](docs/user-guide.md).
+System measurements follow [Stats](https://github.com/exelban/stats) (MIT).
 
 Readiness: [Swift-specific rules and limitations](evals/swift-profile.md), [original and adapted scores](evals/readiness-score.json).

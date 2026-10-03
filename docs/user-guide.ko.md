@@ -36,6 +36,7 @@
 - **문제가 생기면 바로 안내**: 문제마다 이유 한 문장과 해결 버튼 하나(다시 로그인, 다시 시도)를 보여 주고, 마지막 값은 그대로 둡니다.
 - **요청 제한 존중**: 서버가 기다려 달라고 하면 그 시각까지 다시 요청하지 않습니다.
 - **자동 업데이트**: 하루 한 번 새 버전을 확인하고, 버튼 하나로 처음 설치할 때와 같은 검증을 거쳐 업데이트합니다.
+- **시스템 상태도 함께 (선택)**: CPU·RAM·SSD·네트워크 속도를 메뉴 막대의 별도 항목으로 보여 줍니다. [Stats](https://github.com/exelban/stats)와 같은 방식으로 계산합니다. 기본은 꺼져 있습니다.
 - **가볍고 사적**: 계정 가입, 분석 도구, 개발자 서버가 없습니다.
 
 ## 설치 (1분)
@@ -96,6 +97,7 @@ rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.ai
 - **비밀번호는 공식 로그인 페이지에 직접 입력됩니다.** 앱은 읽거나 저장하지 않습니다. 로그인 창은 지금 주소가 공식 사이트인지, Google·Apple·Microsoft 로그인 단계인지, 그 밖의 사이트인지 알려 줍니다.
 - **CLI 로그인은 읽기만 합니다.** Claude Code의 키체인 항목과 Codex의 `auth.json`은 읽기만 합니다. Codex 서버 조회가 안 될 때는 대화 기록 파일(`~/.codex/sessions`)의 끝부분을 읽어 사용량 숫자만 꺼냅니다.
 - **연결 해제**: 앱 안에 저장된 그 서비스의 로그인이 지워집니다. Google·Apple 로그인 상태는 두 서비스가 함께 쓰므로 웹으로 연결된 서비스를 모두 해제할 때 지워집니다. Claude Code·Codex 자체의 로그인은 건드리지 않습니다.
+- **시스템 상태**(켠 경우): 이 Mac의 CPU·메모리·디스크·네트워크 수치를 Mac 안에서만 읽고, 어디로도 보내지 않습니다.
 - **업데이트 확인**: 하루 한 번 GitHub(`api.github.com`)에 접속합니다. 설정에서 끌 수 있습니다.
 
 보안 문제를 발견하셨다면 공개 이슈 대신 비공개로 알려 주세요. [SECURITY.md](../SECURITY.md)를 참고하세요.
@@ -144,5 +146,7 @@ VERSION=1.2.1 ./scripts/build-app.sh      # dist/ 에 유니버설 앱, ZIP(+ .s
 ## 라이선스
 
 [MIT](../LICENSE) © 2026 Sean Woo
+
+시스템 상태 계산 방식은 Serhiy Mytrovtsiy의 [Stats](https://github.com/exelban/stats)(MIT)를 참고했습니다.
 
 AI Usage는 개인이 만든 독립 프로젝트이며 Anthropic, OpenAI와 제휴하거나 후원·보증을 받지 않습니다. Claude, Claude Code, Codex, ChatGPT와 각 로고는 해당 회사의 상표이며, 로고 경로는 [Simple Icons](https://simpleicons.org)(CC0)에서 가져왔습니다.

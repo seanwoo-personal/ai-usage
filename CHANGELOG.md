@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Optional system section in the menu bar: CPU, RAM, SSD and network speed, refreshed every 2 seconds and
+  calculated the same way as [Stats](https://github.com/exelban/stats). Off by default; turn it on in Settings and
+  pick which metrics to show. Uses only built-in macOS interfaces (no helper tool, admin rights or permissions).
+
 ## [1.2.2] - 2026-10-02
 
 ### Changed

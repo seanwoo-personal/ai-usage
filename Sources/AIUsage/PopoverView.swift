@@ -348,6 +348,8 @@ struct SettingsSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            SystemSettings()
+
             UpdateSettings()
 
             Text("AI Usage \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") · " + L.t("만든 사람: Sean", "Made by Sean"))
@@ -420,6 +422,31 @@ struct UpdateSettings: View {
             }
             if updater.available == nil, let problem = updater.problem {
                 Text(problem).font(.caption).foregroundStyle(.orange)
+            }
+        }
+    }
+}
+
+/// Optional CPU · RAM · SSD · network section in the menu bar.
+struct SystemSettings: View {
+    @EnvironmentObject var settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(L.t("메뉴 막대에 시스템 상태 표시", "Show system status in the menu bar"), isOn: $settings.showSystem)
+            if settings.showSystem {
+                HStack(spacing: 10) {
+                    ForEach(SystemStatusImage.Metric.allCases) { m in
+                        Toggle(m.label, isOn: Binding(
+                            get: { settings.systemMetrics.contains(m) },
+                            set: { on in if on { settings.systemMetrics.insert(m) } else { settings.systemMetrics.remove(m) } }))
+                    }
+                }
+                .padding(.leading, 18)
+                Text(L.t("2초마다 이 Mac의 CPU·메모리·디스크·네트워크 사용량을 읽어요. 어디로도 보내지 않아요.",
+                         "Reads this Mac's CPU, memory, disk and network every 2 seconds. Nothing is sent anywhere."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.leading, 18)
             }
         }
     }
