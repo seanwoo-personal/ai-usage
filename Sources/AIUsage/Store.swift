@@ -41,6 +41,8 @@ final class AppSettings: ObservableObject {
     @Published var onboarded: Bool { didSet { d.set(onboarded, forKey: "onboarded") } }
     /// Optional system section in the menu bar (off by default).
     @Published var showSystem: Bool { didSet { d.set(showSystem, forKey: "showSystem") } }
+    /// Colour CPU / RAM / SSD yellow or red when the Mac is under strain (on by default).
+    @Published var systemColors: Bool { didSet { d.set(systemColors, forKey: "systemColors") } }
     @Published var systemMetrics: Set<SystemStatusImage.Metric> {
         didSet { d.set(systemMetrics.map(\.rawValue).sorted(), forKey: "systemMetrics") }
     }
@@ -50,7 +52,7 @@ final class AppSettings: ObservableObject {
     init(defaults d: UserDefaults = .standard) {
         self.d = d
         d.register(defaults: ["showRemaining": true, "showResetInBar": true, "refreshMinutes": 3, "onboarded": false,
-                              "showSystem": false, "systemMetrics": SystemStatusImage.Metric.allCases.map(\.rawValue)])
+                              "showSystem": false, "systemColors": true, "systemMetrics": SystemStatusImage.Metric.allCases.map(\.rawValue)])
         barModes = Dictionary(uniqueKeysWithValues: Provider.allCases.map { p in
             (p, BarMode(rawValue: d.string(forKey: "barMode.\(p.rawValue)") ?? "") ?? .weekly)
         })
@@ -65,6 +67,7 @@ final class AppSettings: ObservableObject {
         refreshMinutes = Self.validRefreshMinutes(d.integer(forKey: "refreshMinutes"))
         onboarded = d.bool(forKey: "onboarded") || d.bool(forKey: "connectedClaude") || d.bool(forKey: "connectedCodex")
         showSystem = d.bool(forKey: "showSystem")
+        systemColors = d.bool(forKey: "systemColors")
         systemMetrics = Set((d.stringArray(forKey: "systemMetrics") ?? []).compactMap(SystemStatusImage.Metric.init(rawValue:)))
     }
 

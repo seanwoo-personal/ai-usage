@@ -443,8 +443,12 @@ struct SystemSettings: View {
                     }
                 }
                 .padding(.leading, 18)
-                Text(L.t("2초마다 이 Mac의 CPU·메모리·디스크·네트워크 사용량을 읽어요. 어디로도 보내지 않아요.",
-                         "Reads this Mac's CPU, memory, disk and network every 2 seconds. Nothing is sent anywhere."))
+                Toggle(L.t("상태가 나쁘면 노랑·빨강으로 표시", "Turn yellow or red when the Mac is under strain"), isOn: $settings.systemColors)
+                    .padding(.leading, 18)
+                    .help(L.t("CPU: 최근 5초 평균 70% 이상 노랑, 90% 이상 빨강 · RAM: 여유 메모리 20% 미만 노랑, 10% 미만 빨강 · SSD: 90% 이상 노랑, 95% 이상 빨강",
+                              "CPU: 5-second average ≥70% yellow, ≥90% red · RAM: under 20% free yellow, under 10% red · SSD: ≥90% yellow, ≥95% red"))
+                Text(L.t("1초마다 이 Mac의 CPU·메모리·디스크·네트워크 사용량을 읽어요. 어디로도 보내지 않아요.",
+                         "Reads this Mac's CPU, memory, disk and network every second. Nothing is sent anywhere."))
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.leading, 18)
             }

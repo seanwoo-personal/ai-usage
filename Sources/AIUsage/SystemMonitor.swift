@@ -13,15 +13,81 @@ final class SystemMonitor: ObservableObject {
         var disk: Double?       // 0...100
         var upload: Double?     // bytes per second
         var download: Double?   // bytes per second
+        var cpuLevel = SystemLevel.normal
+        var memoryLevel = SystemLevel.normal
+        var diskLevel = SystemLevel.normal
+
+        func level(_ m: SystemStatusImage.Metric) -> SystemLevel {
+            switch m {
+            case .cpu: return cpuLevel
+            case .memory: return memoryLevel
+            case .disk: return diskLevel
+            case .network: return .normal
+            }
+        }
+    }
+
+    /// Extra readings for the detail popovers. Filled only while a popover is open.
+    struct Details: Equatable {
+        var cpu: SystemMath.CPUBreakdown?
+        var cores: [Double?] = []
+        var load: [Double]?
+        var uptime: TimeInterval = 0
+        var memory: SystemMath.MemoryBreakdown?
+        var swapUsed: UInt64?
+        var swapTotal: UInt64?
+        var memoryFree: Int?
+        var diskTotal: Int64?
+        var diskFree: Int64?
+        var diskReadTotal: UInt64?
+        var diskWriteTotal: UInt64?
+        var netSentTotal: UInt64?
+        var netReceivedTotal: UInt64?
+        var interface: String?
+        var localIP: String?
+    }
+
+    /// Recent samples (two minutes) for the charts. Kept for every metric so a chart is
+    /// already filled when its popover opens.
+    struct History: Equatable {
+        var cpu: [Double] = [], memory: [Double] = []
+        var diskRead: [Double] = [], diskWrite: [Double] = []
+        var upload: [Double] = [], download: [Double] = []
     }
 
     @Published private(set) var reading = Reading()
+    @Published private(set) var details = Details()
+    @Published private(set) var history = History()
+    @Published private(set) var diskRead: Double?
+    @Published private(set) var diskWrite: Double?
+    @Published private(set) var topProcesses: [ProcessUsage] = []
 
-    static let interval: TimeInterval = 2
+    /// The metric whose popover is open. Top processes and details are read only while this is set.
+    var focus: SystemStatusImage.Metric? {
+        didSet {
+            guard focus != oldValue else { return }
+            topProcesses = []
+            lastDiskByProcess = nil
+            lastInterfaceCheck = nil
+            if focus != nil, isRunning { sampleDetails(); fetchTop() }
+        }
+    }
+
+    /// Same default as Stats: once a second.
+    static let interval: TimeInterval = 1
+    /// Two minutes of samples for the charts.
+    nonisolated static let historyLength = 120
     private var timer: Timer?
     private var lastCPU: SystemMath.CPUTicks?
+    private var lastCores: [SystemMath.CPUTicks]?
+    private var cpuBreakdown: SystemMath.CPUBreakdown?
+    private var coreUsage: [Double?] = []
     private var lastNet: (counters: SystemMath.NetCounters, at: Date)?
+    private var lastDiskIO: (read: UInt64, written: UInt64, at: Date)?
     private var lastDiskCheck: Date?
+    private var lastInterfaceCheck: Date?
+    private var lastDiskByProcess: (bytes: [Int32: (name: String, bytes: UInt64)], at: Date)?
+    private var fetchingTop = false
 
     var isRunning: Bool { timer != nil }
 
@@ -29,7 +95,10 @@ final class SystemMonitor: ObservableObject {
         guard timer == nil else { return }
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.sample() }
+            Task { @MainActor in
+                self?.sample()
+                if self?.focus != nil { self?.sampleDetails(); self?.fetchTop() }
+            }
         }
     }
 
@@ -37,17 +106,36 @@ final class SystemMonitor: ObservableObject {
         timer?.invalidate()
         timer = nil
         lastCPU = nil
+        lastCores = nil
+        cpuBreakdown = nil
+        coreUsage = []
         lastNet = nil
+        lastDiskIO = nil
+        lastDiskByProcess = nil
         reading = Reading()
+        details = Details()
+        history = History()
+        diskRead = nil
+        diskWrite = nil
+        topProcesses = []
     }
 
     private func sample() {
         var r = reading
+        var h = history
         let now = Date()
 
         if let ticks = SystemProbe.cpuTicks() {
-            if let prev = lastCPU { r.cpu = SystemMath.cpuUsage(from: prev, to: ticks) }
+            if let prev = lastCPU {
+                r.cpu = SystemMath.cpuUsage(from: prev, to: ticks)
+                cpuBreakdown = SystemMath.cpuBreakdown(from: prev, to: ticks)
+            }
             lastCPU = ticks
+        }
+        // Per-core ticks are cheap; keep them current so the CPU popover has values the moment it opens.
+        if let cores = SystemProbe.coreTicks() {
+            if let prev = lastCores { coreUsage = SystemMath.coreUsage(from: prev, to: cores) }
+            lastCores = cores
         }
         if let mem = SystemProbe.memory() { r.memory = SystemMath.memoryUsedPercent(mem) }
         // Disk usage changes slowly; check every 30 seconds.
@@ -63,7 +151,101 @@ final class SystemMonitor: ObservableObject {
             }
             lastNet = (counters, now)
         }
+        var read: Double?, write: Double?
+        if let io = SystemProbe.diskIO() {
+            if let prev = lastDiskIO {
+                let secs = now.timeIntervalSince(prev.at)
+                read = SystemMath.rate(from: prev.read, to: io.read, seconds: secs)
+                write = SystemMath.rate(from: prev.written, to: io.written, seconds: secs)
+            }
+            lastDiskIO = (io.read, io.written, now)
+        }
+        r.memoryLevel = SystemMath.memoryLevel(freePercent: SystemProbe.memoryFreePercent(), pressure: SystemProbe.memoryPressure())
+        r.diskLevel = SystemMath.diskLevel(percent: r.disk)
+        if r.cpu != nil { h.cpu = SystemMath.appending(limit: Self.historyLength, r.cpu, to: h.cpu) }
+        h.memory = SystemMath.appending(limit: Self.historyLength, r.memory, to: h.memory)
+        if r.upload != nil || r.download != nil {
+            h.upload = SystemMath.appending(limit: Self.historyLength, r.upload, to: h.upload)
+            h.download = SystemMath.appending(limit: Self.historyLength, r.download, to: h.download)
+        }
+        if read != nil || write != nil {
+            h.diskRead = SystemMath.appending(limit: Self.historyLength, read, to: h.diskRead)
+            h.diskWrite = SystemMath.appending(limit: Self.historyLength, write, to: h.diskWrite)
+        }
+        r.cpuLevel = r.cpu == nil ? .normal : SystemMath.cpuLevel(recent: h.cpu)
         if r != reading { reading = r }
+        if h != history { history = h }
+        if read != diskRead { diskRead = read }
+        if write != diskWrite { diskWrite = write }
+    }
+
+    private func sampleDetails() {
+        guard let focus else { return }
+        var d = details
+        let now = Date()
+        switch focus {
+        case .cpu:
+            d.cpu = cpuBreakdown
+            d.cores = coreUsage
+            d.load = SystemProbe.loadAverage()
+            d.uptime = ProcessInfo.processInfo.systemUptime
+        case .memory:
+            d.memory = SystemProbe.memory().flatMap(SystemMath.memoryBreakdown)
+            let swap = SystemProbe.swap()
+            d.swapUsed = swap?.used
+            d.swapTotal = swap?.total
+            d.memoryFree = SystemProbe.memoryFreePercent()
+        case .disk:
+            if let disk = SystemProbe.disk() { d.diskTotal = disk.total; d.diskFree = disk.available }
+            d.diskReadTotal = lastDiskIO?.read
+            d.diskWriteTotal = lastDiskIO?.written
+        case .network:
+            d.netSentTotal = lastNet?.counters.sent
+            d.netReceivedTotal = lastNet?.counters.received
+            // Interface names come from SystemConfiguration, which is slower; refresh every 10 seconds.
+            if lastInterfaceCheck.map({ now.timeIntervalSince($0) >= 10 }) ?? true {
+                let iface = SystemProbe.primaryInterface()
+                d.interface = iface?.name
+                d.localIP = iface?.ip
+                lastInterfaceCheck = now
+            }
+        }
+        if d != details { details = d }
+    }
+
+    /// Reads the busiest processes off the main thread; skipped if the previous read is still running.
+    private func fetchTop() {
+        guard let metric = focus, metric != .network, !fetchingTop else { return }
+        fetchingTop = true
+        let previous = lastDiskByProcess
+        Task.detached(priority: .utility) {
+            // The first disk reading needs two snapshots; take them half a second apart so the
+            // list appears right away instead of after the next tick.
+            var previous = previous
+            if metric == .disk, previous == nil {
+                previous = (SystemProbe.diskBytesByProcess(), Date())
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            let now = Date()
+            let bytes = metric == .disk ? SystemProbe.diskBytesByProcess() : [:]
+            let snapshot = (bytes: bytes, at: now)
+            let top: [ProcessUsage]
+            switch metric {
+            case .cpu: top = SystemProbe.topByPS("pcpu", sortFlag: "-r", valueScale: 1)
+            case .memory: top = SystemProbe.topByPS("rss", sortFlag: "-m", valueScale: 1024)
+            case .disk:
+                top = previous.map { SystemMath.topDiskProcesses(from: $0.bytes, to: bytes, seconds: now.timeIntervalSince($0.at)) } ?? []
+            case .network: top = []
+            }
+            let hadPrevious = previous != nil
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.fetchingTop = false
+                guard self.focus == metric else { return }
+                if metric == .disk { self.lastDiskByProcess = snapshot }
+                if metric != .disk || hadPrevious { self.topProcesses = top }
+            }
+        }
     }
 }
 

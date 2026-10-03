@@ -433,5 +433,81 @@ enum SystemTests {
               "percent text: missing, infinite and out-of-range values are safe")
         check(SystemStatusImage.render(.init(), metrics: SystemStatusImage.Metric.allCases) != nil, "menu bar image draws with no readings yet")
         check(SystemStatusImage.render(.init(), metrics: []) == nil, "no metrics chosen → no system item")
+
+        print("System detail popovers")
+        let b = SystemMath.cpuBreakdown(from: T(user: 100, system: 50, idle: 850, nice: 0), to: T(user: 120, system: 70, idle: 1000, nice: 10))
+        check(b == .init(user: 15, system: 10, idle: 75), "CPU detail: user (with nice) / system / idle shares of 200 ticks")
+        check(SystemMath.cpuBreakdown(from: T(user: 9, system: 0, idle: 0, nice: 0), to: T(user: 1, system: 0, idle: 0, nice: 0)) == nil,
+              "CPU detail: counters went backwards → no reading")
+        let cores = SystemMath.coreUsage(from: [T(user: 0, system: 0, idle: 0, nice: 0), T(user: 0, system: 0, idle: 0, nice: 0)],
+                                         to: [T(user: 50, system: 0, idle: 50, nice: 0), T(user: 0, system: 0, idle: 0, nice: 0)])
+        check(cores.count == 2 && cores[0] == 50 && cores[1] == nil, "cores: per-core usage; an idle-less core gives no reading")
+        check(SystemMath.coreUsage(from: [], to: [T(user: 1, system: 0, idle: 1, nice: 0)]) == [nil], "cores: core count changed → no readings")
+
+        if let mb = SystemMath.memoryBreakdown(m) {
+            check(mb.used == 18 * gb && mb.wired == 3 * gb && mb.compressed == 2 * gb && mb.app == 13 * gb,
+                  "RAM detail: used 18 GB = app 13 + wired 3 + compressed 2")
+            check(mb.cache == 2 * gb && mb.free == 6 * gb && mb.total == 24 * gb, "RAM detail: cache = purgeable + file-backed; free = total − used")
+        } else { check(false, "RAM detail: breakdown available") }
+        var tight = m; tight.wired = pages(20 * gb); tight.compressed = pages(10 * gb)
+        check(SystemMath.memoryBreakdown(tight)?.app == 0, "RAM detail: wired + compressed above used → app 0, not negative")
+
+        check(SystemMath.rate(from: 1000, to: 5000, seconds: 2) == 2000, "disk speed: bytes per second from counter deltas")
+        check(SystemMath.rate(from: 5000, to: 1000, seconds: 2) == nil, "disk speed: counters reset → no reading")
+        check(SystemMath.rate(from: 0, to: 10, seconds: 0.1) == nil, "disk speed: too short an interval → no reading")
+
+        check(SystemMath.bytesText(0) == "0 B" && SystemMath.bytesText(512) == "512 B", "size text: bytes")
+        check(SystemMath.bytesText(1.5 * 1024 * 1024 * 1024) == "1.5 GB", "size text: 1.5 GB")
+        check(SystemMath.bytesText(926 * 1024 * 1024 * 1024) == "926 GB", "size text: 926 GB")
+        check(SystemMath.bytesText(nil) == "–" && SystemMath.bytesText(-1) == "–" && SystemMath.bytesText(.nan) == "–", "size text: invalid → dash")
+
+        let ps = SystemMath.parsePS("""
+          412  52.3 WindowServer
+           88   0,5 Google Chrome Helper (Renderer)
+          bad line
+            7  -1 negative
+        """)
+        check(ps.map(\.pid) == [412, 88] && ps[1].name == "Google Chrome Helper (Renderer)" && ps[1].value == 0.5,
+              "ps: pid, value (comma decimals too) and names with spaces; bad lines skipped")
+        check(SystemMath.parsePS("  1  2048 kernel_task", valueScale: 1024).first?.value == 2_097_152, "ps: RSS kilobytes scaled to bytes")
+
+        let before: [Int32: (name: String, bytes: UInt64)] = [1: ("a", 100), 2: ("b", 100), 3: ("c", 500), 4: ("old", 0)]
+        let after: [Int32: (name: String, bytes: UInt64)] = [1: ("a", 300), 2: ("b", 100), 3: ("c", 100), 4: ("new", 900), 5: ("d", 9)]
+        let top = SystemMath.topDiskProcesses(from: before, to: after, seconds: 2)
+        check(top.map(\.pid) == [1] && top.first?.value == 100,
+              "disk top: only processes that did I/O; new, reused-pid and reset counters left out")
+
+        var hist: [Double] = []
+        for i in 0..<70 { hist = SystemMath.appending(Double(i), to: hist) }
+        check(hist.count == 60 && hist.first == 10 && hist.last == 69, "history keeps the newest 60 samples")
+        check(SystemMath.appending(.nan, to: []) == [0] && SystemMath.appending(nil, to: []) == [0], "history: missing or invalid sample → 0")
+
+        check(SystemMath.pressureText(.normal, freePercent: 47) == L.t("정상 (여유 47%)", "Normal (47% free)")
+              && SystemMath.pressureText(.normal, freePercent: nil) == "–" && SystemMath.pressureText(.normal, freePercent: 500) == "–",
+              "memory pressure text")
+        check(SystemMath.uptimeText(3 * 86_400 + 4 * 3600) == L.t("3일 4시간", "3d 4h"), "uptime text")
+
+        print("Strain colours")
+        check(SystemMath.cpuLevel(recent: [10, 10, 10, 100, 10]) == .normal, "CPU colour: one brief spike stays normal")
+        check(SystemMath.cpuLevel(recent: [5, 5, 75, 75, 75, 75, 75]) == .warning, "CPU colour: 5-second average ≥70% → yellow (older samples ignored)")
+        check(SystemMath.cpuLevel(recent: [95, 92, 90, 91, 99]) == .critical, "CPU colour: 5-second average ≥90% → red")
+        check(SystemMath.cpuLevel(recent: []) == .normal && SystemMath.cpuLevel(recent: [.nan, .infinity]) == .normal,
+              "CPU colour: no or invalid samples → normal")
+        check(SystemMath.memoryLevel(freePercent: 47, pressure: 2) == .normal,
+              "RAM colour: plenty free → normal even if the kernel's lingering 'warning' flag is set")
+        check(SystemMath.memoryLevel(freePercent: 19, pressure: 1) == .warning && SystemMath.memoryLevel(freePercent: 9, pressure: 1) == .critical,
+              "RAM colour: under 20% free → yellow, under 10% → red")
+        check(SystemMath.memoryLevel(freePercent: 50, pressure: 4) == .critical, "RAM colour: kernel critical → red")
+        check(SystemMath.memoryLevel(freePercent: nil, pressure: nil) == .normal && SystemMath.memoryLevel(freePercent: -3, pressure: nil) == .normal,
+              "RAM colour: unknown → normal")
+        check(SystemMath.diskLevel(percent: 89.9) == .normal && SystemMath.diskLevel(percent: 90) == .warning
+              && SystemMath.diskLevel(percent: 95) == .critical && SystemMath.diskLevel(percent: .nan) == .normal, "SSD colour: 90% / 95% used")
+        var strained = SystemMonitor.Reading(cpu: 95, memory: 80, disk: 50)
+        strained.cpuLevel = .critical
+        check(SystemStatusImage.render(strained, metrics: [.cpu], ink: .black, colors: true) != nil, "coloured menu bar image draws")
+        check(SystemStatusImage.alertColor(.normal, dark: true) == nil && SystemStatusImage.alertColor(.warning, dark: false) != nil,
+              "normal readings keep the menu bar colour")
+        let colorSettings = AppSettings.forTesting()
+        check(colorSettings.systemColors, "strain colours are on by default")
     }
 }

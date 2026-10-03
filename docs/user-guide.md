@@ -36,7 +36,7 @@
 - **Clear when something's wrong**: every problem comes with one sentence and one button (log in again, try again). Last known values stay visible.
 - **Respects rate limits**: honours the server's `Retry-After` and never hammers the API.
 - **Updates itself**: checks once a day; one click installs the new version with the same checks as a fresh install.
-- **System status too (optional)**: CPU, RAM, SSD and network speed in a second menu bar item, measured the same way as [Stats](https://github.com/exelban/stats). Off by default.
+- **System status too (optional)**: CPU, RAM, SSD and network speed in a second menu bar item, measured the same way as [Stats](https://github.com/exelban/stats). Click any of them for details: a short history chart, a breakdown and the busiest processes. CPU, RAM and SSD turn yellow or red when the Mac is under strain. Off by default.
 - **Small and private**: no account, no analytics, no server of its own.
 
 ## Install
@@ -95,7 +95,7 @@ rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.ai
 - **Passwords go straight to the official login page.** The app never reads or stores them. The login window tells you whether you're on the service itself, a sign-in step (Google, Apple, Microsoft), or somewhere else.
 - **CLI logins are read, never changed.** Claude Code's Keychain item and Codex's `auth.json` are only read. If Codex's live check fails, the app reads the end of Codex's session logs (`~/.codex/sessions`) and extracts the usage figures only.
 - **Disconnecting** erases that service's login stored in the app. Google/Apple sign-in data is shared by both services and is erased once no service is connected through the web. Claude Code's and Codex's own logins are never touched.
-- **System section** (if you turn it on) reads this Mac's CPU, memory, disk and network counters locally; nothing is sent anywhere.
+- **System section** (if you turn it on) reads this Mac's CPU, memory, disk and network counters locally; nothing is sent anywhere. The detail popovers list process names (via `ps` and the process-usage API) only while they are open.
 - **Update checks** contact GitHub (`api.github.com`) once a day; you can turn this off.
 
 Found a security issue? Please report it privately; see [SECURITY.md](../SECURITY.md).

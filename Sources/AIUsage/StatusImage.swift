@@ -130,9 +130,22 @@ enum SystemStatusImage {
         }
     }
 
-    static func render(_ r: SystemMonitor.Reading, metrics: [Metric], height: CGFloat = 22, ink inkColor: NSColor? = nil) -> NSImage? {
+    /// Value colour for a warning or critical reading. Yellow is unreadable on a light menu bar, so
+    /// light bars get a darker amber.
+    static func alertColor(_ level: SystemLevel, dark: Bool) -> NSColor? {
+        switch level {
+        case .normal: return nil
+        case .warning: return dark ? NSColor(srgbRed: 1, green: 0.84, blue: 0.04, alpha: 1) : NSColor(srgbRed: 0.85, green: 0.5, blue: 0, alpha: 1)
+        case .critical: return dark ? NSColor(srgbRed: 1, green: 0.32, blue: 0.3, alpha: 1) : NSColor(srgbRed: 0.85, green: 0.1, blue: 0.1, alpha: 1)
+        }
+    }
+
+    /// `colors`: tint CPU / RAM / SSD values yellow or red when their level calls for it (needs a solid `ink`).
+    static func render(_ r: SystemMonitor.Reading, metrics: [Metric], height: CGFloat = 22, ink inkColor: NSColor? = nil,
+                       colors: Bool = false) -> NSImage? {
         guard !metrics.isEmpty else { return nil }
         let ink = inkColor ?? NSColor.black
+        let dark = inkColor == .white
         let labelAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 8.5, weight: .semibold), .foregroundColor: ink.withAlphaComponent(0.85),
         ]
@@ -155,7 +168,9 @@ enum SystemStatusImage {
             default:
                 let v = m == .cpu ? r.cpu : m == .memory ? r.memory : r.disk
                 let label = NSAttributedString(string: m.label, attributes: labelAttrs)
-                parts.append((label, NSAttributedString(string: SystemMath.percentText(v), attributes: valueAttrs),
+                var attrs = valueAttrs
+                if colors, inkColor != nil, let c = alertColor(r.level(m), dark: dark) { attrs[.foregroundColor] = c }
+                parts.append((label, NSAttributedString(string: SystemMath.percentText(v), attributes: attrs),
                               max(percentWidth, ceil(label.size().width))))
             }
         }
@@ -178,7 +193,10 @@ enum SystemStatusImage {
 /// Solid text colour for the menu bar, from the status button's current appearance.
 enum MenuBarInk {
     @MainActor static func color(for button: NSStatusBarButton?) -> NSColor {
-        let dark = button?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return dark ? .white : .black
+        isDark(button) ? .white : .black
+    }
+
+    @MainActor static func isDark(_ button: NSStatusBarButton?) -> Bool {
+        button?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 }

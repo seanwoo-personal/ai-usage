@@ -16,6 +16,8 @@ flowchart LR
     ClaudeProvider --> Models
     CodexProvider --> Models
     Store --> UI
+    Main --> SystemMonitor
+    SystemMonitor --> UI
     Main --> Updater
     Updater --> Installer
     Build --> Installer
@@ -34,6 +36,7 @@ This is one Swift executable, not a JavaScript monorepo. The diagram is a review
 | [WebAccount](../Sources/AIUsage/WebAccount.swift) | Trust origin, shared identity-provider storage, login windows; LiveBackend consumes | OriginTests, login state tests; manual live-login smoke check remains separate |
 | [CodexProvider](../Sources/AIUsage/CodexProvider.swift) / [ClaudeProvider](../Sources/AIUsage/ClaudeProvider.swift) | Parse remote data, read CLI credentials; do not mutate CLI ownership | Synthetic parser/log fixtures and CredentialTests |
 | [PopoverView](../Sources/AIUsage/PopoverView.swift) / [StatusImage](../Sources/AIUsage/StatusImage.swift) | Display Store data and user actions, bilingual copy | SelfTest and manual light/dark, Korean/English visual review |
+| [SystemMonitor](../Sources/AIUsage/SystemMonitor.swift) / [SystemDetails](../Sources/AIUsage/SystemDetails.swift) / [SystemDetailView](../Sources/AIUsage/SystemDetailView.swift) | Local CPU, memory, disk and network readings, strain levels and detail popovers; Main draws one status item per metric. Process lists only while a popover is open | SystemTests, crash probes, `--render-details` off-screen render; app CPU use stays near idle |
 | [Updater](../Sources/AIUsage/Updater.swift) | Parse release and invoke bundled installer; packaging must keep script available | UpdaterTests, isolated installer suite; signed distribution smoke checks at release |
 | [LoginItem](../Sources/AIUsage/LoginItem.swift) | Enable only for installed app paths | SelfTest startup/location cases; installed-app manual check |
 | [Build](../scripts/build-app.sh) / [Installer](../scripts/install.sh) | Fixed identity, pinned version, integrity checks, replacement and rollback | Installer fixtures, universal packaging at release |

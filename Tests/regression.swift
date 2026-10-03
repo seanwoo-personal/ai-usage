@@ -41,6 +41,21 @@ enum Regression {
             st.testInject(.claude, Regression.snap([UsageWindow(kind: .weekly, usedPercent: 10, resetsAt: Date(timeIntervalSince1970: 1e15), windowMinutes: 10_080)]))
             return !StatusImage.blocks(store: st, settings: s).isEmpty
         }),
+        ("memory breakdown with huge page counts doesn't crash", {
+            let m = SystemMath.Memory(pageSize: .max, active: 1, inactive: 0, speculative: 0, wired: .max, compressed: .max,
+                                      purgeable: .max, external: .max, physical: 1 << 30)
+            _ = SystemMath.memoryBreakdown(m)
+            return true
+        }),
+        ("bytesText(1e300) / uptimeText(inf) don't crash", {
+            !SystemMath.bytesText(1e300).isEmpty && !SystemMath.uptimeText(.infinity).isEmpty && !SystemMath.uptimeText(.nan).isEmpty
+        }),
+        ("disk/network rate with UInt64.max counters doesn't crash", {
+            SystemMath.rate(from: 0, to: .max, seconds: 1) != nil && SystemMath.rate(from: .max, to: 0, seconds: 1) == nil
+        }),
+        ("ps output with odd lines doesn't crash", {
+            SystemMath.parsePS("\n  \n abc\n 1\n 2 nan x\n 3 1e400 y\n -4 1 z\n 99999999999 1 w\n").isEmpty
+        }),
         ("refreshMinutes = Int.max: start() doesn't crash", {
             let (s, st) = Regression.isolatedStore()
             s.refreshMinutes = Int.max
