@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-03
+
 ### Fixed
 - Installing or updating failed on Macs without the Xcode command line developer tools ("can't run on this Mac"),
   and could prompt to install them. The CPU-type check now uses the built-in `file` command instead of `lipo`.
@@ -103,7 +105,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.1...v1.2.2
