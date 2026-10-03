@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-04
+
 ### Added
 - Internet check per connection (Settings, off by default): every minute wired LAN and Wi-Fi are each tested,
   forced through their own interface, against Apple's connectivity page (captive.apple.com, which macOS itself uses).
@@ -166,7 +168,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.0...v1.5.1
