@@ -56,6 +56,15 @@ enum Regression {
         ("ps output with odd lines doesn't crash", {
             SystemMath.parsePS("\n  \n abc\n 1\n 2 nan x\n 3 1e400 y\n -4 1 z\n 99999999999 1 w\n").isEmpty
         }),
+        ("SSD health from all-0xFF SMART data doesn't crash", {
+            HardwareMath.driveHealth(smart: [UInt8](repeating: 0xFF, count: 512), model: nil)?.level == "critical"
+        }),
+        ("core types with huge or negative ids don't crash", {
+            HardwareMath.coreTypes([(Int.max, "E"), (-1, "P"), (0, "E")], count: 3) == nil
+        }),
+        ("nettop lines with huge numbers don't crash", {
+            HardwareMath.parseNettop(",bytes_in,bytes_out,\n,bytes_in,bytes_out,\na.1,1e400,1e400,\nb.99999999999,1,1,\n", seconds: 1).isEmpty
+        }),
         ("refreshMinutes = Int.max: start() doesn't crash", {
             let (s, st) = Regression.isolatedStore()
             s.refreshMinutes = Int.max
@@ -123,7 +132,7 @@ enum Regression {
         codexLogTests()
     }
 
-    @MainActor static func runAsync() async { await StoreTests.run(); CredentialTests.run(); OriginTests.run(); UpdaterTests.run(); SystemTests.run(); StatusTests.run() }
+    @MainActor static func runAsync() async { await StoreTests.run(); CredentialTests.run(); OriginTests.run(); UpdaterTests.run(); SystemTests.run(); StatusTests.run(); HardwareTests.run() }
 
     // MARK: Codex log fixtures
 

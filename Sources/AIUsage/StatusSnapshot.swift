@@ -36,6 +36,35 @@ struct StatusSnapshot: Codable, Equatable {
         var disk: Disk
         var network: Network
         var history: History?
+        // Added in 1.6.0; nil where the Mac doesn't have it (no GPU stats, no battery, no Wi-Fi ...).
+        var gpu: GPUReading?
+        var sensors: Sensors?
+        var drives: [DriveHealth]?
+        var volumes: [VolumeReading]?
+        var wifi: WiFiReading?
+        var battery: BatteryReading?
+    }
+
+    struct Sensors: Codable, Equatable {
+        var level: String
+        var cpuAverageC: Double?
+        var cpuMaxC: Double?
+        var ssdC: Double?
+        var batteryC: Double?
+        var fans: [FanReading]
+        var systemPowerWatts: Double?
+        var temperatures: [TemperatureReading]
+
+        /// Temperatures, fans and power right now; nil when the Mac reports none of them.
+        static func read() -> Sensors? {
+            let temps = HardwareProbe.temperatures()
+            let power = HardwareProbe.fansAndPower()
+            guard !temps.isEmpty || !power.fans.isEmpty || power.systemWatts != nil else { return nil }
+            let t = HardwareMath.temperatureSummary(temps)
+            return .init(level: HardwareMath.temperatureLevel(t.cpuMax).name,
+                         cpuAverageC: t.cpuAverage.map { ($0 * 10).rounded() / 10 }, cpuMaxC: t.cpuMax, ssdC: t.ssd, batteryC: t.battery,
+                         fans: power.fans, systemPowerWatts: power.systemWatts, temperatures: temps)
+        }
     }
 
     struct CPU: Codable, Equatable {
@@ -46,6 +75,10 @@ struct StatusSnapshot: Codable, Equatable {
         var idlePercent: Double?
         var coresPercent: [Double?]
         var loadAverage: [Double]?
+        /// Core group per entry of `cores_percent` ("efficiency", "performance", "super", ...; Apple Silicon).
+        var coreTypes: [String]? = nil
+        /// Average usage per core group, fastest group first.
+        var coreGroups: [CoreGroup]? = nil
     }
 
     struct Memory: Codable, Equatable {
@@ -92,6 +125,9 @@ struct StatusSnapshot: Codable, Equatable {
         var diskWriteBytesPerSecond: [Double]
         var downloadBytesPerSecond: [Double]
         var uploadBytesPerSecond: [Double]
+        /// Only while GPU / temperature is shown in the menu bar or its popover is open.
+        var gpuPercent: [Double]? = nil
+        var cpuTemperatureC: [Double]? = nil
     }
 
     struct AIUsageStatus: Codable, Equatable {
@@ -131,6 +167,9 @@ struct StatusSnapshot: Codable, Equatable {
         s.system.disk.writeBytesPerSecond = r(s.system.disk.writeBytesPerSecond)
         s.system.network.downloadBytesPerSecond = r(s.system.network.downloadBytesPerSecond)
         s.system.network.uploadBytesPerSecond = r(s.system.network.uploadBytesPerSecond)
+        s.system.cpu.coreGroups = s.system.cpu.coreGroups?.map { var g = $0; g.usagePercent = p(g.usagePercent); return g }
+        s.system.volumes = s.system.volumes?.map { var v = $0; v.usedPercent = p(v.usedPercent); return v }
+        if var w = s.system.wifi { w.transmitRateMbps = r(w.transmitRateMbps); s.system.wifi = w }
         if var h = s.system.history {
             h.cpuPercent = h.cpuPercent.compactMap(p)
             h.memoryPercent = h.memoryPercent.compactMap(p)
@@ -138,6 +177,8 @@ struct StatusSnapshot: Codable, Equatable {
             h.diskWriteBytesPerSecond = h.diskWriteBytesPerSecond.compactMap(r)
             h.downloadBytesPerSecond = h.downloadBytesPerSecond.compactMap(r)
             h.uploadBytesPerSecond = h.uploadBytesPerSecond.compactMap(r)
+            h.gpuPercent = h.gpuPercent?.compactMap(p)
+            h.cpuTemperatureC = h.cpuTemperatureC?.compactMap(p)
             s.system.history = h
         }
         s.aiUsage = s.aiUsage?.map { u in
@@ -175,12 +216,71 @@ struct StatusSnapshot: Codable, Equatable {
 }
 
 extension SystemLevel {
+    init(name: String) {
+        switch name {
+        case "critical": self = .critical
+        case "warning": self = .warning
+        default: self = .normal
+        }
+    }
+
     var name: String {
         switch self {
         case .normal: return "normal"
         case .warning: return "warning"
         case .critical: return "critical"
         }
+    }
+}
+
+// MARK: - Hardware (slow parts cached)
+
+/// Remembers readings that change slowly or cost more to take, so the 5-second save stays cheap.
+final class HardwareCache {
+    private var coreTypes: (count: Int, kinds: [String]?, levels: [(name: String, count: Int)])?
+    private var drives: (value: [DriveHealth], at: Date)?
+    private var volumes: (value: [VolumeReading], at: Date)?
+    private var wifi: (value: WiFiReading?, at: Date)?
+
+    /// Core layout never changes while running; remembered per core count (0 = not measured yet).
+    func coreTypes(count: Int) -> (kinds: [String]?, levels: [(name: String, count: Int)]) {
+        guard count > 0 else { return (nil, []) }
+        if let c = coreTypes, c.count == count { return (c.kinds, c.levels) }
+        let levels = HardwareProbe.perfLevels()
+        let kinds = HardwareProbe.coreTypes(count: count).flatMap { HardwareMath.coreKinds(letters: $0, levels: levels) }
+        coreTypes = (count, kinds, levels)
+        return (kinds, levels)
+    }
+
+    private func cached<T>(_ slot: inout (value: T, at: Date)?, every seconds: TimeInterval, now: Date, _ read: () -> T) -> T {
+        if let s = slot, now.timeIntervalSince(s.at) < seconds, now >= s.at { return s.value }
+        let v = read()
+        slot = (v, now)
+        return v
+    }
+
+    func drives(now: Date = Date()) -> [DriveHealth] { cached(&drives, every: 300, now: now, HardwareProbe.driveHealth) }
+    func volumes(now: Date = Date()) -> [VolumeReading] { cached(&volumes, every: 30, now: now, HardwareProbe.volumes) }
+    func wifi(now: Date = Date()) -> WiFiReading? { cached(&wifi, every: 10, now: now, HardwareProbe.wifi) }
+}
+
+extension StatusSnapshot.SystemStatus {
+    /// Adds core types, GPU, temperatures, fans, power, drive health, volumes, Wi-Fi and battery.
+    mutating func addHardware(cache: HardwareCache, now: Date = Date()) {
+        let layout = cache.coreTypes(count: cpu.coresPercent.count)
+        cpu.coreTypes = layout.kinds
+        cpu.coreGroups = HardwareMath.coreGroups(cpu.coresPercent, kinds: layout.kinds, levels: layout.levels)
+        if var g = HardwareProbe.gpu() {
+            g.level = HardwareMath.gpuLevel(g.utilizationPercent).name
+            gpu = g
+        }
+        sensors = StatusSnapshot.Sensors.read()
+        let d = cache.drives(now: now)
+        drives = d.isEmpty ? nil : d
+        let v = cache.volumes(now: now)
+        volumes = v.isEmpty ? nil : v
+        wifi = cache.wifi(now: now)
+        battery = HardwareProbe.battery()
     }
 }
 

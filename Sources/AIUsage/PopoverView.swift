@@ -435,7 +435,7 @@ struct SystemSettings: View {
         VStack(alignment: .leading, spacing: 6) {
             Toggle(L.t("메뉴 막대에 시스템 상태 표시", "Show system status in the menu bar"), isOn: $settings.showSystem)
             if settings.showSystem {
-                HStack(spacing: 10) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3), alignment: .leading, spacing: 4) {
                     ForEach(SystemStatusImage.Metric.allCases) { m in
                         Toggle(m.label, isOn: Binding(
                             get: { settings.systemMetrics.contains(m) },

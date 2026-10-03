@@ -54,7 +54,7 @@ final class AppSettings: ObservableObject {
     init(defaults d: UserDefaults = .standard) {
         self.d = d
         d.register(defaults: ["showRemaining": true, "showResetInBar": true, "refreshMinutes": 3, "onboarded": false,
-                              "showSystem": false, "systemColors": true, "shareStatus": true, "systemMetrics": SystemStatusImage.Metric.allCases.map(\.rawValue)])
+                              "showSystem": false, "systemColors": true, "shareStatus": true, "systemMetrics": SystemStatusImage.Metric.defaults.map(\.rawValue)])
         barModes = Dictionary(uniqueKeysWithValues: Provider.allCases.map { p in
             (p, BarMode(rawValue: d.string(forKey: "barMode.\(p.rawValue)") ?? "") ?? .weekly)
         })

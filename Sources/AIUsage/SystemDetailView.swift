@@ -12,8 +12,10 @@ struct SystemDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             switch metric {
             case .cpu: cpu
+            case .gpu: gpu
             case .memory: memory
             case .disk: disk
+            case .sensors: sensors
             case .network: network
             }
             Divider()
@@ -43,9 +45,20 @@ struct SystemDetailView: View {
                 Row(L.t("유휴", "Idle"), SystemMath.percentText(d.cpu?.idle), dot: .secondary)
             }
             if !d.cores.isEmpty {
-                Section(L.t("코어별", "Cores")) { CoreBars(values: d.cores) }
+                Section(L.t("코어별", "Cores")) {
+                    CoreBars(values: d.cores, types: d.coreTypes)
+                    ForEach(HardwareMath.coreGroups(d.cores, kinds: d.coreTypes,
+                                                    levels: Array(zip(d.coreLevelNames, d.coreLevelCounts)).map { (name: $0.0, count: $0.1) }) ?? [],
+                            id: \.kind) { g in
+                        Row(CoreKind.label(g.kind, count: g.count), SystemMath.percentText(g.usagePercent), dot: CoreKind.color(g.kind))
+                    }
+                }
             }
             Section(L.t("정보", "Details")) {
+                if let t = monitor.reading.temperature {
+                    Row(L.t("온도 (가장 뜨거운 곳)", "Temperature (hottest)"), Self.celsius(t),
+                        valueColor: LevelColor.color(monitor.reading.temperatureLevel))
+                }
                 Row(L.t("평균 부하", "Load average"),
                     d.load.map { $0.map { String(format: "%.2f", $0) }.joined(separator: " · ") } ?? "–")
                 Row(L.t("가동 시간", "Uptime"), d.uptime > 0 ? SystemMath.uptimeText(d.uptime) : "–")
@@ -105,9 +118,108 @@ struct SystemDetailView: View {
                 Row(L.t("부팅 후 읽음", "Read since startup"), SystemMath.bytesText(d.diskReadTotal.map { Double($0) }))
                 Row(L.t("부팅 후 씀", "Written since startup"), SystemMath.bytesText(d.diskWriteTotal.map { Double($0) }))
             }
+            ForEach(Array(d.drives.enumerated()), id: \.offset) { _, h in
+                Section(L.t("SSD 건강 상태", "SSD health") + (d.drives.count > 1 ? " · \(h.model ?? "")" : "")) {
+                    let level = SystemLevel(name: h.level)
+                    Row(L.t("상태", "Status"), level == .normal ? L.t("정상", "Good") : level == .warning ? L.t("주의", "Warning") : L.t("위험", "Critical"),
+                        valueColor: LevelColor.color(level))
+                    Row(L.t("사용한 수명", "Life used"), h.percentageUsed.map { "\($0)%" } ?? "–")
+                    Row(L.t("예비 공간", "Available spare"), h.availableSparePercent.map { "\($0)%" } ?? "–")
+                    if let t = h.temperatureC { Row(L.t("온도", "Temperature"), "\(t)°C") }
+                    Row(L.t("사용 시간", "Power-on hours"), L.t("\(h.powerOnHours)시간", "\(h.powerOnHours) h"))
+                    Row(L.t("전원 켠 횟수", "Power cycles"), "\(h.powerCycles)")
+                    Row(L.t("비정상 종료", "Unsafe shutdowns"), "\(h.unsafeShutdowns)")
+                    Row(L.t("미디어 오류", "Media errors"), "\(h.mediaErrors)", valueColor: h.mediaErrors > 0 ? .orange : nil)
+                    Row(L.t("평생 읽음 · 씀", "Lifetime read · written"),
+                        "\(SystemMath.bytesText(Double(h.dataReadBytes))) · \(SystemMath.bytesText(Double(h.dataWrittenBytes)))")
+                }
+            }
+            if d.volumes.count > 1 {
+                Section(L.t("연결된 디스크", "Volumes")) {
+                    ForEach(Array(d.volumes.enumerated()), id: \.offset) { _, v in
+                        Row(v.name, "\(SystemMath.percentText(v.usedPercent)) · " + L.t("\(SystemMath.bytesText(Double(v.freeBytes))) 남음", "\(SystemMath.bytesText(Double(v.freeBytes))) free"))
+                    }
+                }
+            }
             TopList(title: L.t("디스크를 많이 쓰는 프로세스", "Top processes"), items: monitor.topProcesses,
                     empty: L.t("지금 디스크를 쓰는 프로세스가 없어요.", "No process is using the disk right now.")) {
                 SystemMath.rateText($0.value)
+            }
+        }
+    }
+
+    // MARK: GPU
+
+    private var gpu: some View {
+        let g = monitor.details.gpu
+        return VStack(alignment: .leading, spacing: 12) {
+            Header(title: "GPU", value: SystemMath.percentText(monitor.reading.gpu ?? g?.utilizationPercent), level: monitor.reading.gpuLevel,
+                   caption: g.map { [$0.model, $0.cores.map { L.t("\($0)코어", "\($0) cores") }].compactMap { $0 }.joined(separator: " · ") })
+            Chart(series: [.init(values: monitor.history.gpu, color: .purple)], maxValue: 100)
+            Section(L.t("사용량", "Usage")) {
+                Row(L.t("전체", "Device"), SystemMath.percentText(g?.utilizationPercent), dot: .purple)
+                Row(L.t("렌더러", "Renderer"), SystemMath.percentText(g?.rendererPercent))
+                Row(L.t("타일러", "Tiler"), SystemMath.percentText(g?.tilerPercent))
+                Row(L.t("사용 중인 메모리", "Memory in use"), SystemMath.bytesText(g?.memoryInUseBytes.map { Double($0) }))
+            }
+            if g == nil {
+                Text(L.t("이 Mac에서는 GPU 사용량을 읽을 수 없어요.", "GPU usage isn't available on this Mac."))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: Sensors
+
+    static func celsius(_ c: Double?) -> String {
+        guard let c, c.isFinite else { return "–" }
+        return String(format: "%.0f°C", c)
+    }
+
+    private var sensors: some View {
+        let s = monitor.details.sensors
+        let b = monitor.details.battery
+        return VStack(alignment: .leading, spacing: 12) {
+            Header(title: L.t("온도", "Temperature"), value: Self.celsius(monitor.reading.temperature ?? s?.cpuMaxC),
+                   level: monitor.reading.temperatureLevel,
+                   caption: L.t("CPU에서 가장 뜨거운 곳", "Hottest CPU sensor"))
+            Chart(series: [.init(values: monitor.history.temperature, color: .orange)], maxValue: 110)
+            Section(L.t("온도", "Temperatures")) {
+                Row(L.t("CPU 평균", "CPU average"), Self.celsius(s?.cpuAverageC), dot: .orange)
+                Row(L.t("CPU 최고", "CPU hottest"), Self.celsius(s?.cpuMaxC))
+                if let ssd = s?.ssdC { Row("SSD", Self.celsius(ssd)) }
+                if let bat = s?.batteryC { Row(L.t("배터리", "Battery"), Self.celsius(bat)) }
+            }
+            if let s, !s.fans.isEmpty || s.systemPowerWatts != nil {
+                Section(L.t("팬·전력", "Fans and power")) {
+                    ForEach(s.fans, id: \.index) { f in
+                        Row(s.fans.count > 1 ? L.t("팬 \(f.index + 1)", "Fan \(f.index + 1)") : L.t("팬", "Fan"),
+                            "\(Int(f.rpm)) rpm" + (f.maxRpm.map { " / \(Int($0))" } ?? ""))
+                    }
+                    if let w = s.systemPowerWatts { Row(L.t("시스템 전력", "System power"), String(format: "%.1f W", w)) }
+                }
+            }
+            if let b {
+                Section(L.t("배터리", "Battery")) {
+                    Row(L.t("충전량", "Charge"), b.percent.map { "\($0)%" } ?? "–")
+                    Row(L.t("상태", "State"), b.charging ? L.t("충전 중", "Charging") : b.pluggedIn ? L.t("전원 연결됨", "Plugged in") : L.t("배터리 사용 중", "On battery"))
+                    if let m = b.minutesRemaining { Row(b.charging ? L.t("완충까지", "Until full") : L.t("남은 시간", "Time left"), "\(m / 60):" + String(format: "%02d", m % 60)) }
+                    if let h = b.healthPercent { Row(L.t("배터리 성능", "Health"), String(format: "%.0f%%", h)) }
+                    if let c = b.cycleCount { Row(L.t("충전 횟수", "Cycles"), "\(c)") }
+                }
+            }
+            if let s, !s.temperatures.isEmpty {
+                DisclosureGroup(L.t("센서 전체 \(s.temperatures.count)개", "All \(s.temperatures.count) sensors")) {
+                    VStack(spacing: 3) {
+                        ForEach(s.temperatures, id: \.name) { t in Row(t.name, Self.celsius(t.celsius)) }
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.system(size: 11))
+            }
+            if s == nil && b == nil {
+                Text(L.t("이 Mac에서는 온도 센서를 읽을 수 없어요.", "Temperature sensors aren't available on this Mac."))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }
@@ -131,6 +243,19 @@ struct SystemDetailView: View {
                 Row(L.t("내부 IP", "Local IP"), d.localIP ?? "–")
                 Row(L.t("부팅 후 받음", "Received since startup"), SystemMath.bytesText(d.netReceivedTotal.map { Double($0) }))
                 Row(L.t("부팅 후 보냄", "Sent since startup"), SystemMath.bytesText(d.netSentTotal.map { Double($0) }))
+            }
+            if let w = d.wifi {
+                Section("Wi-Fi") {
+                    if let ssid = w.ssid { Row(L.t("네트워크", "Network"), ssid) }
+                    Row(L.t("신호", "Signal"), w.rssiDbm.map { "\($0) dBm" } ?? L.t("연결 안 됨", "Not connected"))
+                    if let n = w.noiseDbm { Row(L.t("잡음", "Noise"), "\(n) dBm") }
+                    if let c = w.channel { Row(L.t("채널", "Channel"), "\(c)" + (w.bandGhz.map { " · " + String(format: $0 == 2.4 ? "%.1f GHz" : "%.0f GHz", $0) } ?? "")) }
+                    if let t = w.transmitRateMbps { Row(L.t("전송 속도", "Transmit rate"), String(format: "%.0f Mbps", t)) }
+                }
+            }
+            TopList(title: L.t("네트워크를 많이 쓰는 프로세스", "Top processes"), items: monitor.topProcesses,
+                    empty: L.t("측정 중… (약 5초)", "Measuring… (about 5 s)")) {
+                SystemMath.rateText($0.value)
             }
         }
     }
@@ -263,8 +388,29 @@ private struct Chart: View {
     }
 }
 
+/// Names and colours for core groups.
+enum CoreKind {
+    static func label(_ kind: String, count: Int) -> String {
+        switch kind {
+        case "efficiency": return L.t("효율 코어 \(count)개", "Efficiency cores (\(count))")
+        case "performance": return L.t("성능 코어 \(count)개", "Performance cores (\(count))")
+        case "super": return L.t("슈퍼 코어 \(count)개", "Super cores (\(count))")
+        default: return "\(kind.capitalized) (\(count))"
+        }
+    }
+
+    static func color(_ kind: String?) -> Color {
+        switch kind {
+        case "efficiency": return .green
+        case "super": return .purple
+        default: return .accentColor
+        }
+    }
+}
+
 private struct CoreBars: View {
     let values: [Double?]
+    var types: [String]?
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 3) {
@@ -272,7 +418,7 @@ private struct CoreBars: View {
                 let v = values[i] ?? 0
                 ZStack(alignment: .bottom) {
                     RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.12))
-                    RoundedRectangle(cornerRadius: 2).fill(Color.accentColor)
+                    RoundedRectangle(cornerRadius: 2).fill(CoreKind.color(types?[safe: i]))
                         .frame(height: max(1, 30 * CGFloat(v / 100)))
                 }
                 .frame(height: 30)
@@ -308,4 +454,8 @@ private struct TopList: View {
         NSRunningApplication(processIdentifier: pid)?.icon
             ?? NSWorkspace.shared.icon(for: .unixExecutable)
     }
+}
+
+private extension Array {
+    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }

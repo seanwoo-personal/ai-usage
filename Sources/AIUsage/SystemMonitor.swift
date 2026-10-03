@@ -13,15 +13,21 @@ final class SystemMonitor: ObservableObject {
         var disk: Double?       // 0...100
         var upload: Double?     // bytes per second
         var download: Double?   // bytes per second
+        var gpu: Double?        // 0...100, read only while GPU is shown or open
+        var temperature: Double? // hottest CPU die sensor, °C, read only while shown or open
         var cpuLevel = SystemLevel.normal
         var memoryLevel = SystemLevel.normal
         var diskLevel = SystemLevel.normal
+        var gpuLevel = SystemLevel.normal
+        var temperatureLevel = SystemLevel.normal
 
         func level(_ m: SystemStatusImage.Metric) -> SystemLevel {
             switch m {
             case .cpu: return cpuLevel
+            case .gpu: return gpuLevel
             case .memory: return memoryLevel
             case .disk: return diskLevel
+            case .sensors: return temperatureLevel
             case .network: return .normal
             }
         }
@@ -45,6 +51,15 @@ final class SystemMonitor: ObservableObject {
         var netReceivedTotal: UInt64?
         var interface: String?
         var localIP: String?
+        var coreTypes: [String]?
+        var coreLevelNames: [String] = []
+        var coreLevelCounts: [Int] = []
+        var gpu: GPUReading?
+        var sensors: StatusSnapshot.Sensors?
+        var battery: BatteryReading?
+        var drives: [DriveHealth] = []
+        var volumes: [VolumeReading] = []
+        var wifi: WiFiReading?
     }
 
     /// Recent samples (two minutes) for the charts. Kept for every metric so a chart is
@@ -53,6 +68,7 @@ final class SystemMonitor: ObservableObject {
         var cpu: [Double] = [], memory: [Double] = []
         var diskRead: [Double] = [], diskWrite: [Double] = []
         var upload: [Double] = [], download: [Double] = []
+        var gpu: [Double] = [], temperature: [Double] = []
     }
 
     @Published private(set) var reading = Reading()
@@ -76,6 +92,8 @@ final class SystemMonitor: ObservableObject {
     /// Same default as Stats: once a second while something is on screen. With nothing shown (for
     /// example a Mac without a monitor that only keeps its status for other tools) every 5 seconds.
     private(set) var interval: TimeInterval = 1
+    /// Metrics shown in the menu bar; GPU and temperatures are read every tick only when shown or open.
+    var shown: Set<SystemStatusImage.Metric> = []
     /// Two minutes of samples for the charts.
     nonisolated static let historyLength = 120
     private var timer: Timer?
@@ -90,6 +108,8 @@ final class SystemMonitor: ObservableObject {
     private var cachedInterface: (name: String, ip: String?)?
     private var lastDiskByProcess: (bytes: [Int32: (name: String, bytes: UInt64)], at: Date)?
     private var fetchingTop = false
+    let hardware = HardwareCache()
+    private var lastGPU: GPUReading?
 
     var isRunning: Bool { timer != nil }
 
@@ -187,6 +207,18 @@ final class SystemMonitor: ObservableObject {
             h.diskWrite = SystemMath.appending(limit: Self.historyLength, write, to: h.diskWrite)
         }
         r.cpuLevel = r.cpu == nil ? .normal : SystemMath.cpuLevel(recent: h.cpu)
+        if shown.contains(.gpu) || focus == .gpu {
+            lastGPU = HardwareProbe.gpu()
+            r.gpu = lastGPU?.utilizationPercent
+            h.gpu = SystemMath.appending(limit: Self.historyLength, r.gpu, to: h.gpu)
+            r.gpuLevel = HardwareMath.gpuLevel(r.gpu)
+        }
+        if shown.contains(.sensors) || focus == .sensors || focus == .cpu {
+            let t = HardwareMath.temperatureSummary(HardwareProbe.temperatures())
+            r.temperature = t.cpuMax
+            if let c = t.cpuMax { h.temperature = SystemMath.appending(limit: Self.historyLength, c, to: h.temperature) }
+            r.temperatureLevel = HardwareMath.temperatureLevel(t.cpuMax)
+        }
         if r != reading { reading = r }
         if h != history { history = h }
         if read != diskRead { diskRead = read }
@@ -207,6 +239,15 @@ final class SystemMonitor: ObservableObject {
             d.cores = coreUsage
             d.load = SystemProbe.loadAverage()
             d.uptime = ProcessInfo.processInfo.systemUptime
+            let layout = hardware.coreTypes(count: coreUsage.count)
+            d.coreTypes = layout.kinds
+            d.coreLevelNames = layout.levels.map(\.name)
+            d.coreLevelCounts = layout.levels.map(\.count)
+        case .gpu:
+            d.gpu = lastGPU   // the same reading as the header, taken this tick
+        case .sensors:
+            d.sensors = StatusSnapshot.Sensors.read()
+            d.battery = HardwareProbe.battery()
         case .memory:
             d.memory = SystemProbe.memory().flatMap(SystemMath.memoryBreakdown)
             let swap = SystemProbe.swap()
@@ -217,6 +258,8 @@ final class SystemMonitor: ObservableObject {
             if let disk = SystemProbe.disk() { d.diskTotal = disk.total; d.diskFree = disk.available }
             d.diskReadTotal = lastDiskIO?.read
             d.diskWriteTotal = lastDiskIO?.written
+            d.drives = hardware.drives(now: now)
+            d.volumes = hardware.volumes(now: now)
         case .network:
             d.netSentTotal = lastNet?.counters.sent
             d.netReceivedTotal = lastNet?.counters.received
@@ -227,20 +270,21 @@ final class SystemMonitor: ObservableObject {
             }
             d.interface = cachedInterface?.name
             d.localIP = cachedInterface?.ip
+            d.wifi = hardware.wifi(now: now)
         }
     }
 
     /// Everything this monitor knows, for the saved status file. Reads the detail values on demand.
     func statusSnapshot() -> StatusSnapshot.SystemStatus {
         var d = Details()
-        for m in SystemStatusImage.Metric.allCases { fill(&d, m, now: Date()) }
+        for m: SystemStatusImage.Metric in [.cpu, .memory, .disk, .network] { fill(&d, m, now: Date()) }
         let r = reading
         let h = history
         let disk = d.diskTotal.flatMap { t in d.diskFree.map { (total: t, available: $0) } }
         let swap = d.swapUsed.flatMap { u in d.swapTotal.map { (used: u, total: $0) } }
         let totals = d.diskReadTotal.flatMap { rd in d.diskWriteTotal.map { (read: rd, written: $0) } }
         let net = lastNet?.counters
-        return StatusSnapshot.system(
+        var system = StatusSnapshot.system(
             cpu: .init(usagePercent: r.cpu, level: r.cpuLevel.name, userPercent: d.cpu?.user, systemPercent: d.cpu?.system,
                        idlePercent: d.cpu?.idle, coresPercent: d.cores, loadAverage: d.load),
             memory: d.memory, memoryPercent: r.memory, pressureFree: d.memoryFree, pressure: SystemProbe.memoryPressure(),
@@ -249,12 +293,15 @@ final class SystemMonitor: ObservableObject {
             download: r.download, upload: r.upload, netTotals: net, interface: d.interface, localIP: d.localIP,
             history: .init(intervalSeconds: interval, cpuPercent: h.cpu, memoryPercent: h.memory,
                            diskReadBytesPerSecond: h.diskRead, diskWriteBytesPerSecond: h.diskWrite,
-                           downloadBytesPerSecond: h.download, uploadBytesPerSecond: h.upload))
+                           downloadBytesPerSecond: h.download, uploadBytesPerSecond: h.upload,
+                           gpuPercent: h.gpu.isEmpty ? nil : h.gpu, cpuTemperatureC: h.temperature.isEmpty ? nil : h.temperature))
+        system.addHardware(cache: hardware)
+        return system
     }
 
     /// Reads the busiest processes off the main thread; skipped if the previous read is still running.
     private func fetchTop() {
-        guard let metric = focus, metric != .network, !fetchingTop else { return }
+        guard let metric = focus, [.cpu, .memory, .disk, .network].contains(metric), !fetchingTop else { return }
         fetchingTop = true
         let previous = lastDiskByProcess
         Task.detached(priority: .utility) {
@@ -274,7 +321,8 @@ final class SystemMonitor: ObservableObject {
             case .memory: top = SystemProbe.topByPS("rss", sortFlag: "-m", valueScale: 1024)
             case .disk:
                 top = previous.map { SystemMath.topDiskProcesses(from: $0.bytes, to: bytes, seconds: now.timeIntervalSince($0.at)) } ?? []
-            case .network: top = []
+            case .network: top = HardwareProbe.topNetwork(limit: 5)
+            case .gpu, .sensors: top = []
             }
             let hadPrevious = previous != nil
             await MainActor.run { [weak self] in

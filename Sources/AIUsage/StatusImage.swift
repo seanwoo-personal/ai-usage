@@ -118,14 +118,30 @@ enum StatusImage {
 /// the value below. Each block has a fixed width so the menu bar doesn't shift as numbers change.
 enum SystemStatusImage {
     enum Metric: String, CaseIterable, Identifiable {
-        case cpu, memory, disk, network
+        case cpu, gpu, memory, disk, sensors, network
         var id: String { rawValue }
         var label: String {
             switch self {
             case .cpu: return "CPU"
+            case .gpu: return "GPU"
             case .memory: return "RAM"
             case .disk: return "SSD"
+            case .sensors: return L.t("온도", "TEMP")
             case .network: return L.t("네트워크", "Network")
+            }
+        }
+        /// Shown in the menu bar for new installs; GPU and temperature are opt-in.
+        static let defaults: [Metric] = [.cpu, .memory, .disk, .network]
+
+        /// The menu bar text for one reading.
+        func valueText(_ r: SystemMonitor.Reading) -> String {
+            switch self {
+            case .cpu: return SystemMath.percentText(r.cpu)
+            case .gpu: return SystemMath.percentText(r.gpu)
+            case .memory: return SystemMath.percentText(r.memory)
+            case .disk: return SystemMath.percentText(r.disk)
+            case .sensors: return r.temperature.map { $0.isFinite ? "\(Int($0.rounded()))°" : "–" } ?? "–"
+            case .network: return SystemMath.rateText(r.download)
             }
         }
     }
@@ -166,11 +182,10 @@ enum SystemStatusImage {
                 parts.append((NSAttributedString(string: "↑ " + SystemMath.rateText(r.upload), attributes: netAttrs),
                               NSAttributedString(string: "↓ " + SystemMath.rateText(r.download), attributes: netAttrs), netWidth))
             default:
-                let v = m == .cpu ? r.cpu : m == .memory ? r.memory : r.disk
                 let label = NSAttributedString(string: m.label, attributes: labelAttrs)
                 var attrs = valueAttrs
                 if colors, inkColor != nil, let c = alertColor(r.level(m), dark: dark) { attrs[.foregroundColor] = c }
-                parts.append((label, NSAttributedString(string: SystemMath.percentText(v), attributes: attrs),
+                parts.append((label, NSAttributedString(string: m.valueText(r), attributes: attrs),
                               max(percentWidth, ceil(label.size().width))))
             }
         }

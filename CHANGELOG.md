@@ -5,6 +5,21 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- More system readings, in the popovers and in saved status / MCP:
+  - CPU: core groups as macOS names them (efficiency, performance, and super on M5 Pro) shown and averaged separately; hottest CPU temperature.
+  - GPU: utilisation (device, renderer, tiler) and memory in use, as an optional menu bar item with a popover.
+  - Temperature: an optional menu bar item; popover with CPU average/hottest, SSD and battery temperatures, fan
+    speeds, system power and every sensor.
+  - SSD health from the drive's SMART report (life used, spare, power-on hours, unsafe shutdowns, media errors,
+    lifetime read/written), plus every mounted disk with free space.
+  - Wi-Fi signal, noise, channel and transmit rate; battery charge, health and cycles on laptops.
+  - Busiest network processes (`top network`, `get_top_processes` with `by: network`, the network popover).
+- `AIUsage status --live` measures now instead of using the app's saved status.
+
+### Changed
+- GPU, temperature and SSD health get normal / warning / critical levels and yellow / red colours like CPU, RAM and SSD.
+
 ## [1.5.1] - 2026-10-03
 
 ### Added

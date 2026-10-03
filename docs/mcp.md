@@ -100,9 +100,9 @@ All three are read-only. They never change settings, stop processes or go online
 |---|---|---|
 | `get_status` | Host info, CPU/memory/disk/network with levels, Claude/Codex usage | `include_history` (boolean, default false): add the last 2 minutes of samples |
 | `get_ai_usage` | Claude/Codex usage only | none |
-| `get_top_processes` | Busiest processes | `by`: `cpu`, `memory` or `disk` (default cpu); `limit`: 1 to 30 (default 10) |
+| `get_top_processes` | Busiest processes | `by`: `cpu`, `memory`, `disk` or `network` (default cpu); `limit`: 1 to 30 (default 10) |
 
-Results are JSON text. The disk process list is measured over one second, so it takes a moment.
+Results are JSON text. The disk process list is measured over one second, and the network list over about five seconds (with the built-in `nettop`), so they take a moment.
 
 ### Levels
 
@@ -113,6 +113,9 @@ Results are JSON text. The disk process list is measured over one second, so it 
 | CPU | 70% or more | 90% or more | 5-second average, so brief spikes don't flap |
 | Memory | under 20% free | under 10% free, or macOS reports critical pressure | Free share as macOS computes memory pressure. High usage from cache is normal |
 | Disk | 90% used or more | 95% used or more | Startup disk |
+| GPU | 70% or more | 90% or more | Current GPU utilisation |
+| Temperature (`sensors.level`) | 85 °C or more | 95 °C or more | Hottest CPU die sensor. Apple Silicon slows itself down near 95 °C |
+| SSD health (`drives[].level`) | 80% of rated life used, or any media error | Drive reports a critical warning, spare space below its threshold, or 100% life used | The drive's own SMART report |
 
 `usage_percent` is the latest one-second value and `level` uses the 5-second average, so they can briefly disagree.
 
@@ -163,6 +166,14 @@ Results are JSON text. The disk process list is measured over one second, so it 
 - Times are UTC in ISO 8601 (`2026-10-03T13:45:10Z`).
 - Sizes are bytes, speeds bytes per second, percentages 0 to 100 rounded to one decimal.
 - With `include_history`, `system.history` holds samples every `interval_seconds` (1 s when the Mac shows system items in its menu bar, otherwise 5 s): CPU, memory, disk read/write, download/upload.
+- Hardware sections (added in 1.6.0) appear only when the Mac has them:
+  - `system.cpu.core_types`: the core group of each entry in `cores_percent` (`efficiency`, `performance`, `super`, ... as macOS names them), and `core_groups`: `kind`, `count`, `usage_percent` per group, fastest first (Apple Silicon).
+  - `system.gpu`: `model`, `cores`, `utilization_percent`, `renderer_percent`, `tiler_percent`, `memory_in_use_bytes`, `level`.
+  - `system.sensors`: `cpu_average_c`, `cpu_max_c`, `ssd_c`, `battery_c`, `fans` (`rpm`, `min_rpm`, `max_rpm`), `system_power_watts`, `level`, and every sensor in `temperatures`.
+  - `system.drives`: SSD health per drive: `percentage_used` (of rated life), `available_spare_percent`, `temperature_c`, `power_on_hours`, `power_cycles`, `unsafe_shutdowns`, `media_errors`, lifetime `data_read_bytes` / `data_written_bytes`, `level`.
+  - `system.volumes`: every mounted disk with `total_bytes`, `free_bytes`, `used_percent`, `file_system`, `is_internal`, `is_removable`, `is_startup`.
+  - `system.wifi`: `interface`, `rssi_dbm` (signal), `noise_dbm`, `channel`, `band_ghz`, `transmit_rate_mbps`. `ssid` stays empty unless the app has Location permission, which it never asks for.
+  - `system.battery` (laptops): `percent`, `charging`, `plugged_in`, `minutes_remaining`, `cycle_count`, `health_percent`, `temperature_c`.
 - `schema_version` changes only when an existing field changes meaning or name. New fields may appear within the same version.
 </details>
 
@@ -196,6 +207,7 @@ ssh m1 "'/Applications/AI Usage.app/Contents/MacOS/AIUsage' status"
 - **Nothing listens.** The MCP server runs only while an AI tool's SSH session is open and exits when it ends.
 - **Read-only.** All three tools only read.
 - **No secrets.** The status file and results never contain tokens, cookies, passwords, e-mail addresses or account IDs (only the one-way `account_key`). The file is readable by your account only (mode 0600).
+- **Temperatures, fans and power** use private but long-stable macOS interfaces (the same ones Stats uses). They only read; no admin rights or helper tool. If a macOS update changes them, those values are just missing.
 - **Process names are untrusted.** Any program can choose its own name, so names are cut to one line, stripped of invisible characters and limited to 64 characters, and AI clients are told that reported text is data, never instructions.
 - Don't want the file? Turn status saving off in Settings; the saved file is deleted too.
 

@@ -133,22 +133,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.button?.imagePosition = .imageOnly
             systemItems[m] = item
         }
+        monitor.shown = Set(metrics)
         if !monitor.isRunning { monitor.start() }
         let r = monitor.reading
         for (m, item) in systemItems {
             let key: String
             switch m {
-            case .cpu: key = SystemMath.percentText(r.cpu) + "\(r.cpuLevel)"
-            case .memory: key = SystemMath.percentText(r.memory) + "\(r.memoryLevel)"
-            case .disk: key = SystemMath.percentText(r.disk) + "\(r.diskLevel)"
             case .network: key = SystemMath.rateText(r.upload) + SystemMath.rateText(r.download)
+            default: key = m.valueText(r) + "\(r.level(m))"
             }
             setImage(item.button, key: key + "\(settings.systemColors)") {
                 SystemStatusImage.render(r, metrics: [m], ink: MenuBarInk.color(for: item.button), colors: settings.systemColors)
             }
             item.button?.toolTip = m == .network
                 ? "↑ \(SystemMath.rateText(r.upload))  ↓ \(SystemMath.rateText(r.download))"
-                : "\(m.label) \(SystemMath.percentText(m == .cpu ? r.cpu : m == .memory ? r.memory : r.disk))"
+                : "\(m.label) \(m.valueText(r))"
         }
     }
 
@@ -271,7 +270,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-details"), i + 1 < Com
         monitor.start()
         for metric in SystemStatusImage.Metric.allCases {
             monitor.focus = metric
-            RunLoop.main.run(until: Date().addingTimeInterval(metric == .cpu ? 9 : 5))
+            RunLoop.main.run(until: Date().addingTimeInterval(metric == .cpu ? 9 : metric == .network ? 8 : 5))
             for dark in [false, true] {
                 let view = NSHostingView(rootView: SystemDetailView(metric: metric, monitor: monitor)
                     .background(dark ? Color(white: 0.16) : Color(white: 0.97)))
