@@ -5,6 +5,13 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-10-04
+
+### Fixed
+- CLI/MCP status snapshots now save every 0.5 seconds instead of every 5 seconds. Sampling stays at
+  0.5 seconds while sharing is enabled even if menu bar system items are hidden, so dashboard consumers
+  polling twice a second receive fresh measurements.
+
 ## [1.7.2] - 2026-10-04
 
 ### Changed
@@ -180,7 +187,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.3...HEAD
+[1.7.3]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.1...v1.7.0

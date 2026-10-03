@@ -119,8 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSStatusBar.system.removeStatusItem(item)
             systemItems[m] = nil
         }
-        // The monitor also runs, more slowly, when nothing is shown but the status is saved for other tools.
-        monitor.setInterval(metrics.isEmpty ? 5 : SystemMonitor.displayInterval)
+        // MCP consumers need the same fresh readings even when menu bar metrics are hidden.
+        monitor.setInterval(SystemMonitor.displayInterval)
         guard !metrics.isEmpty else {
             if settings.shareStatus { if !monitor.isRunning { monitor.start() } } else if monitor.isRunning { monitor.stop() }
             return
@@ -152,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Saves this Mac's status every 5 seconds for `AIUsage status` / `AIUsage mcp`; removes it when turned off.
+    /// Saves status every 0.5 seconds for CLI/MCP consumers; removes it when sharing is turned off.
     private func setStatusSaving(_ on: Bool) {
         statusTimer?.invalidate()
         statusTimer = nil
@@ -160,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             try? FileManager.default.removeItem(at: StatusFile.url)
             return
         }
-        statusTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        statusTimer = Timer.scheduledTimer(withTimeInterval: SystemMonitor.displayInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.saveStatus() }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.saveStatus() }

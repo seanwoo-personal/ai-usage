@@ -27,8 +27,8 @@ flowchart LR
     AI -->|"runs over SSH"| MCP2
 ```
 
-- **The app on each Mac** measures only that Mac every 5 seconds and saves the result to a file. It sends nothing to other Macs or the internet.
-- **The AI tool** connects to each Mac over SSH, runs `AIUsage mcp`, and asks it for values.
+- **The app on each Mac** measures only that Mac and saves the result every 0.5 seconds while status sharing is enabled, including when menu bar metrics are hidden. It sends nothing to other Macs or the internet.
+- **The AI tool** connects to each Mac over SSH, runs `AIUsage mcp`, and asks it for values. MCP returns a response for each request; the consumer must also poll every 0.5 seconds to display updates at that rate.
 - Nothing listens on the network. Who can read a Mac is decided by the SSH access you already control.
 - Combining several Macs on one screen and sending alerts is the AI tool's job.
 

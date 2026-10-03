@@ -90,7 +90,7 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
-    /// Twice a second while system metrics are visible; every 5 seconds with nothing shown.
+    /// Twice a second while system metrics are visible or status is shared with CLI/MCP consumers.
     nonisolated static let displayInterval: TimeInterval = 0.5
     private(set) var interval: TimeInterval = SystemMonitor.displayInterval
     /// Metrics shown in the menu bar; GPU and temperatures are read every tick only when shown or open.
