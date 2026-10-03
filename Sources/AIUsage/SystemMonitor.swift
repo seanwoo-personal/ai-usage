@@ -73,8 +73,9 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
-    /// Same default as Stats: once a second.
-    static let interval: TimeInterval = 1
+    /// Same default as Stats: once a second while something is on screen. With nothing shown (for
+    /// example a Mac without a monitor that only keeps its status for other tools) every 5 seconds.
+    private(set) var interval: TimeInterval = 1
     /// Two minutes of samples for the charts.
     nonisolated static let historyLength = 120
     private var timer: Timer?
@@ -86,15 +87,28 @@ final class SystemMonitor: ObservableObject {
     private var lastDiskIO: (read: UInt64, written: UInt64, at: Date)?
     private var lastDiskCheck: Date?
     private var lastInterfaceCheck: Date?
+    private var cachedInterface: (name: String, ip: String?)?
     private var lastDiskByProcess: (bytes: [Int32: (name: String, bytes: UInt64)], at: Date)?
     private var fetchingTop = false
 
     var isRunning: Bool { timer != nil }
 
+    /// Changes the sampling interval; the chart history restarts so it never mixes intervals.
+    func setInterval(_ seconds: TimeInterval) {
+        guard seconds != interval, seconds.isFinite, seconds >= 0.5 else { return }
+        interval = seconds
+        history = History()
+        if timer != nil {
+            timer?.invalidate()
+            timer = nil
+            start()
+        }
+    }
+
     func start() {
         guard timer == nil else { return }
         sample()
-        timer = Timer.scheduledTimer(withTimeInterval: Self.interval, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.sample()
                 if self?.focus != nil { self?.sampleDetails(); self?.fetchTop() }
@@ -182,8 +196,12 @@ final class SystemMonitor: ObservableObject {
     private func sampleDetails() {
         guard let focus else { return }
         var d = details
-        let now = Date()
-        switch focus {
+        fill(&d, focus, now: Date())
+        if d != details { details = d }
+    }
+
+    private func fill(_ d: inout Details, _ metric: SystemStatusImage.Metric, now: Date) {
+        switch metric {
         case .cpu:
             d.cpu = cpuBreakdown
             d.cores = coreUsage
@@ -204,13 +222,34 @@ final class SystemMonitor: ObservableObject {
             d.netReceivedTotal = lastNet?.counters.received
             // Interface names come from SystemConfiguration, which is slower; refresh every 10 seconds.
             if lastInterfaceCheck.map({ now.timeIntervalSince($0) >= 10 }) ?? true {
-                let iface = SystemProbe.primaryInterface()
-                d.interface = iface?.name
-                d.localIP = iface?.ip
+                cachedInterface = SystemProbe.primaryInterface()
                 lastInterfaceCheck = now
             }
+            d.interface = cachedInterface?.name
+            d.localIP = cachedInterface?.ip
         }
-        if d != details { details = d }
+    }
+
+    /// Everything this monitor knows, for the saved status file. Reads the detail values on demand.
+    func statusSnapshot() -> StatusSnapshot.SystemStatus {
+        var d = Details()
+        for m in SystemStatusImage.Metric.allCases { fill(&d, m, now: Date()) }
+        let r = reading
+        let h = history
+        let disk = d.diskTotal.flatMap { t in d.diskFree.map { (total: t, available: $0) } }
+        let swap = d.swapUsed.flatMap { u in d.swapTotal.map { (used: u, total: $0) } }
+        let totals = d.diskReadTotal.flatMap { rd in d.diskWriteTotal.map { (read: rd, written: $0) } }
+        let net = lastNet?.counters
+        return StatusSnapshot.system(
+            cpu: .init(usagePercent: r.cpu, level: r.cpuLevel.name, userPercent: d.cpu?.user, systemPercent: d.cpu?.system,
+                       idlePercent: d.cpu?.idle, coresPercent: d.cores, loadAverage: d.load),
+            memory: d.memory, memoryPercent: r.memory, pressureFree: d.memoryFree, pressure: SystemProbe.memoryPressure(),
+            swap: swap, disk: disk, diskPercent: r.disk ?? disk.flatMap { SystemMath.diskUsedPercent(total: $0.total, available: $0.available) },
+            diskRead: diskRead, diskWrite: diskWrite, diskTotals: totals,
+            download: r.download, upload: r.upload, netTotals: net, interface: d.interface, localIP: d.localIP,
+            history: .init(intervalSeconds: interval, cpuPercent: h.cpu, memoryPercent: h.memory,
+                           diskReadBytesPerSecond: h.diskRead, diskWriteBytesPerSecond: h.diskWrite,
+                           downloadBytesPerSecond: h.download, uploadBytesPerSecond: h.upload))
     }
 
     /// Reads the busiest processes off the main thread; skipped if the previous read is still running.

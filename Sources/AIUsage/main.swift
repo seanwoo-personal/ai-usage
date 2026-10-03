@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarDark: Bool?
     /// What each button currently shows, so an unchanged image isn't set again.
     private var shownImageKeys: [ObjectIdentifier: String] = [:]
+    private var statusTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -55,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appearanceWatch.append(statusItem.button!.observe(\.effectiveAppearance) { [weak self] _, _ in
             Task { @MainActor in self?.appearanceMayHaveChanged() }
         })
+
+        settings.$shareStatus.removeDuplicates().sink { [weak self] on in
+            Task { @MainActor in self?.setStatusSaving(on) }
+        }.store(in: &bag)
 
         LoginItem.reconcileAtLaunch()
         redraw()
@@ -113,8 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSStatusBar.system.removeStatusItem(item)
             systemItems[m] = nil
         }
+        // The monitor also runs, more slowly, when nothing is shown but the status is saved for other tools.
+        monitor.setInterval(metrics.isEmpty ? 5 : 1)
         guard !metrics.isEmpty else {
-            if monitor.isRunning { monitor.stop() }
+            if settings.shareStatus { if !monitor.isRunning { monitor.start() } } else if monitor.isRunning { monitor.stop() }
             return
         }
         // New items appear to the left of existing ones, so create them right to left.
@@ -143,6 +150,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? "↑ \(SystemMath.rateText(r.upload))  ↓ \(SystemMath.rateText(r.download))"
                 : "\(m.label) \(SystemMath.percentText(m == .cpu ? r.cpu : m == .memory ? r.memory : r.disk))"
         }
+    }
+
+    /// Saves this Mac's status every 5 seconds for `AIUsage status` / `AIUsage mcp`; removes it when turned off.
+    private func setStatusSaving(_ on: Bool) {
+        statusTimer?.invalidate()
+        statusTimer = nil
+        guard on else {
+            try? FileManager.default.removeItem(at: StatusFile.url)
+            return
+        }
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.saveStatus() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.saveStatus() }
+    }
+
+    private func saveStatus() {
+        guard settings.shareStatus, monitor.isRunning else { return }
+        let now = Date()
+        let usage = store.activeProviders.map { p in
+            StatusSnapshot.aiUsage(provider: p, connection: settings.connections[p] ?? .none,
+                                   snapshot: store.entries[p]?.snapshot, error: store.entries[p]?.error, now: now)
+        }
+        let snapshot = StatusSnapshot(generatedAt: now, source: "app", appVersion: updater.current,
+                                      host: SystemProbe.host(), system: monitor.statusSnapshot(), aiUsage: usage)
+        do { try StatusFile.write(snapshot) } catch { NSLog("AIUsage: couldn't save status: \(error)") }
     }
 
     @objc private func toggleDetail(_ sender: Any?) {
@@ -186,6 +219,9 @@ extension AppDelegate: NSPopoverDelegate {
         monitor.focus = nil
     }
 }
+
+// `AIUsage status | top | mcp | help`: read-only commands; they never start the menu bar app.
+if let code = StatusCLI.run(CommandLine.arguments) { exit(code) }
 
 // `AIUsage --render-preview out.png` draws sample menu bar images (used to check the layout).
 if let i = CommandLine.arguments.firstIndex(of: "--render-preview"), i + 1 < CommandLine.arguments.count {

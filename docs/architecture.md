@@ -18,6 +18,8 @@ flowchart LR
     Store --> UI
     Main --> SystemMonitor
     SystemMonitor --> UI
+    Main --> StatusFile
+    CLI --> StatusFile
     Main --> Updater
     Updater --> Installer
     Build --> Installer
@@ -37,6 +39,7 @@ This is one Swift executable, not a JavaScript monorepo. The diagram is a review
 | [CodexProvider](../Sources/AIUsage/CodexProvider.swift) / [ClaudeProvider](../Sources/AIUsage/ClaudeProvider.swift) | Parse remote data, read CLI credentials; do not mutate CLI ownership | Synthetic parser/log fixtures and CredentialTests |
 | [PopoverView](../Sources/AIUsage/PopoverView.swift) / [StatusImage](../Sources/AIUsage/StatusImage.swift) | Display Store data and user actions, bilingual copy | SelfTest and manual light/dark, Korean/English visual review |
 | [SystemMonitor](../Sources/AIUsage/SystemMonitor.swift) / [SystemDetails](../Sources/AIUsage/SystemDetails.swift) / [SystemDetailView](../Sources/AIUsage/SystemDetailView.swift) | Local CPU, memory, disk and network readings, strain levels and detail popovers; Main draws one status item per metric. Process lists only while a popover is open | SystemTests, crash probes, `--render-details` off-screen render; app CPU use stays near idle |
+| [StatusSnapshot](../Sources/AIUsage/StatusSnapshot.swift) / [StatusCLI](../Sources/AIUsage/StatusCLI.swift) | Saved status file (schema v1, 0600) written by Main; read-only `status`/`top`/`mcp` commands consume it or measure live. External AI tools depend on the JSON keys and tool names | StatusTests; real MCP session locally and over SSH before release |
 | [Updater](../Sources/AIUsage/Updater.swift) | Parse release and invoke bundled installer; packaging must keep script available | UpdaterTests, isolated installer suite; signed distribution smoke checks at release |
 | [LoginItem](../Sources/AIUsage/LoginItem.swift) | Enable only for installed app paths | SelfTest startup/location cases; installed-app manual check |
 | [Build](../scripts/build-app.sh) / [Installer](../scripts/install.sh) | Fixed identity, pinned version, integrity checks, replacement and rollback | Installer fixtures, universal packaging at release |

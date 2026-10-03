@@ -36,6 +36,7 @@
 - **문제가 생기면 바로 안내**: 문제마다 이유 한 문장과 해결 버튼 하나(다시 로그인, 다시 시도)를 보여 주고, 마지막 값은 그대로 둡니다.
 - **요청 제한 존중**: 서버가 기다려 달라고 하면 그 시각까지 다시 요청하지 않습니다.
 - **자동 업데이트**: 하루 한 번 새 버전을 확인하고, 버튼 하나로 처음 설치할 때와 같은 검증을 거쳐 업데이트합니다.
+- **AI 도구가 읽을 수 있음**: 앱에 읽기 전용 `status` 명령과 MCP 서버가 들어 있어, AI가 SSH로 여러 Mac을 볼 수 있습니다. [아래](#ai-도구스크립트에서-읽기-mcp)를 참고하세요.
 - **시스템 상태도 함께 (선택)**: CPU·RAM·SSD·네트워크 속도를 메뉴 막대의 별도 항목으로 보여 줍니다. [Stats](https://github.com/exelban/stats)와 같은 방식으로 계산합니다. 각 항목을 누르면 최근 그래프, 세부 사용량, 많이 쓰는 프로세스를 볼 수 있습니다. CPU·RAM·SSD는 상태가 나쁘면 노랑·빨강으로 바뀝니다. 기본은 꺼져 있습니다.
 - **가볍고 사적**: 계정 가입, 분석 도구, 개발자 서버가 없습니다.
 
@@ -90,6 +91,40 @@ osascript -e 'quit app "AI Usage"'; rm -rf "/Applications/AI Usage.app"
 rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.aiusage ~/Library/HTTPStorages/com.sean.aiusage ~/Library/HTTPStorages/com.sean.aiusage.binarycookies ~/Library/WebKit/com.sean.aiusage
 ```
 
+## AI 도구·스크립트에서 읽기 (MCP)
+
+앱은 5초마다 이 Mac의 상태를 본인만 읽을 수 있는 파일
+(`~/Library/Application Support/AI Usage/status.json`)에 저장합니다. CPU·메모리·디스크·네트워크와
+정상/주의/위험 단계, 최근 2분 기록, Claude/Codex 사용량이 들어가며 토큰·쿠키·계정 정보는 넣지 않습니다.
+설정의 **다른 AI·도구가 이 Mac 상태를 읽을 수 있게 저장**에서 끌 수 있습니다.
+
+앱 실행 파일에는 읽기 전용 명령이 들어 있습니다.
+
+```bash
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" status          # 요약. --json을 붙이면 전체
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" top memory      # 많이 쓰는 프로세스: cpu, memory, disk
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" mcp             # MCP 서버(표준 입출력)
+```
+
+앱이 꺼져 있으면 시스템 수치는 그 자리에서 재고, Claude/Codex 사용량은 마지막으로 저장된 값을 돌려줍니다.
+
+**여러 Mac 보기.** 네트워크로 열어 두는 것은 없습니다. AI 도구가 SSH로 들어가 MCP 서버를 실행합니다.
+Mac마다 한 줄씩 추가합니다(원격 로그인이 켜져 있어야 하고, Tailscale과 함께 쓰면 편합니다). MCP 설정 예:
+
+```json
+{
+  "mcpServers": {
+    "mac-office": {
+      "command": "ssh",
+      "args": ["-o", "BatchMode=yes", "office-mac", "'/Applications/AI Usage.app/Contents/MacOS/AIUsage'", "mcp"]
+    }
+  }
+}
+```
+
+도구: `get_status`(전체 요약, `include_history`로 그래프 기록 포함), `get_ai_usage`,
+`get_top_processes`(`by`: cpu·memory·disk, `limit` 1~30). 모두 읽기 전용입니다.
+
 ## 개인정보와 보안
 
 - **남기는 건 사용량 숫자뿐입니다.** 남은 사용량과 리셋 시각만 저장하고, 대화 내용·파일·결제 정보는 저장하거나 보내지 않습니다.
@@ -98,6 +133,7 @@ rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.ai
 - **CLI 로그인은 읽기만 합니다.** Claude Code의 키체인 항목과 Codex의 `auth.json`은 읽기만 합니다. Codex 서버 조회가 안 될 때는 대화 기록 파일(`~/.codex/sessions`)의 끝부분을 읽어 사용량 숫자만 꺼냅니다.
 - **연결 해제**: 앱 안에 저장된 그 서비스의 로그인이 지워집니다. Google·Apple 로그인 상태는 두 서비스가 함께 쓰므로 웹으로 연결된 서비스를 모두 해제할 때 지워집니다. Claude Code·Codex 자체의 로그인은 건드리지 않습니다.
 - **시스템 상태**(켠 경우): 이 Mac의 CPU·메모리·디스크·네트워크 수치를 Mac 안에서만 읽고, 어디로도 보내지 않습니다. 세부 창의 프로세스 목록은 창이 열려 있을 때만 읽습니다.
+- **상태 저장**(`AIUsage status`·`mcp`용): 본인 계정만 읽을 수 있는 파일에만 저장하고, 네트워크로 열어 두지 않습니다. 다른 Mac은 이미 허용한 SSH 접속으로만 읽을 수 있습니다.
 - **업데이트 확인**: 하루 한 번 GitHub(`api.github.com`)에 접속합니다. 설정에서 끌 수 있습니다.
 
 보안 문제를 발견하셨다면 공개 이슈 대신 비공개로 알려 주세요. [SECURITY.md](../SECURITY.md)를 참고하세요.

@@ -5,6 +5,17 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Read this Mac's status from scripts and AI tools: the app saves CPU, memory, disk, network (with levels and
+  two minutes of history) and Claude/Codex usage every 5 seconds to a file only you can read, and its executable
+  has read-only commands — `status` (`--json`), `top cpu|memory|disk` and `mcp`, an MCP server on stdin/stdout.
+  Run it over SSH to watch several Macs; nothing listens on the network. No tokens or account details are included.
+  On by default; Settings → "Save this Mac's status for other AI tools".
+
+### Changed
+- The system monitor keeps running every 5 seconds when no system item is shown, so headless Macs still have
+  current status (every second while an item is shown).
+
 ## [1.4.1] - 2026-10-03
 
 ### Fixed

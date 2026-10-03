@@ -36,6 +36,7 @@
 - **Clear when something's wrong**: every problem comes with one sentence and one button (log in again, try again). Last known values stay visible.
 - **Respects rate limits**: honours the server's `Retry-After` and never hammers the API.
 - **Updates itself**: checks once a day; one click installs the new version with the same checks as a fresh install.
+- **Readable by AI tools**: a read-only `status` command and MCP server built into the app, so an AI can watch several Macs over SSH. See [below](#use-with-ai-tools-and-scripts-mcp).
 - **System status too (optional)**: CPU, RAM, SSD and network speed in a second menu bar item, measured the same way as [Stats](https://github.com/exelban/stats). Click any of them for details: a short history chart, a breakdown and the busiest processes. CPU, RAM and SSD turn yellow or red when the Mac is under strain. Off by default.
 - **Small and private**: no account, no analytics, no server of its own.
 
@@ -88,6 +89,40 @@ To also remove its settings and saved web logins:
 rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.aiusage ~/Library/HTTPStorages/com.sean.aiusage ~/Library/HTTPStorages/com.sean.aiusage.binarycookies ~/Library/WebKit/com.sean.aiusage
 ```
 
+## Use with AI tools and scripts (MCP)
+
+The app saves this Mac's status every 5 seconds to a file only you can read
+(`~/Library/Application Support/AI Usage/status.json`): CPU, memory, disk and network with
+normal / warning / critical levels, the last two minutes of samples, and Claude/Codex usage.
+No tokens, cookies or account details. Turn it off in Settings → **Save this Mac's status for other AI tools**.
+
+The app's executable also has read-only commands:
+
+```bash
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" status          # summary; add --json for everything
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" top memory      # busiest processes: cpu, memory or disk
+"/Applications/AI Usage.app/Contents/MacOS/AIUsage" mcp             # MCP server on stdin/stdout
+```
+
+If the app isn't running, system values are measured on the spot and Claude/Codex usage is the last saved value.
+
+**Watching several Macs.** Nothing listens on the network. An AI tool starts the MCP server over SSH,
+one entry per Mac (Remote Login must be on; Tailscale works well). For example, in an MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "mac-office": {
+      "command": "ssh",
+      "args": ["-o", "BatchMode=yes", "office-mac", "'/Applications/AI Usage.app/Contents/MacOS/AIUsage'", "mcp"]
+    }
+  }
+}
+```
+
+Tools: `get_status` (overview; `include_history` for the chart samples), `get_ai_usage`, and
+`get_top_processes` (`by`: cpu, memory or disk; `limit` 1–30). All are read-only.
+
 ## Privacy and security
 
 - **Only usage numbers are kept**: remaining percentage and reset times. Conversations, files and billing details are never stored or sent.
@@ -96,6 +131,7 @@ rm -rf ~/Library/Preferences/com.sean.aiusage.plist ~/Library/Caches/com.sean.ai
 - **CLI logins are read, never changed.** Claude Code's Keychain item and Codex's `auth.json` are only read. If Codex's live check fails, the app reads the end of Codex's session logs (`~/.codex/sessions`) and extracts the usage figures only.
 - **Disconnecting** erases that service's login stored in the app. Google/Apple sign-in data is shared by both services and is erased once no service is connected through the web. Claude Code's and Codex's own logins are never touched.
 - **System section** (if you turn it on) reads this Mac's CPU, memory, disk and network counters locally; nothing is sent anywhere. The detail popovers list process names (via `ps` and the process-usage API) only while they are open.
+- **Saved status** (for `AIUsage status` / `mcp`) stays in a file only your account can read; nothing listens on the network. Other Macs can read it only through SSH access you already granted.
 - **Update checks** contact GitHub (`api.github.com`) once a day; you can turn this off.
 
 Found a security issue? Please report it privately; see [SECURITY.md](../SECURITY.md).

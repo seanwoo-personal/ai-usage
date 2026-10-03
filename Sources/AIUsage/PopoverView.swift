@@ -452,6 +452,9 @@ struct SystemSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.leading, 18)
             }
+            Toggle(L.t("다른 AI·도구가 이 Mac 상태를 읽을 수 있게 저장", "Save this Mac's status for other AI tools"), isOn: $settings.shareStatus)
+                .help(L.t("5초마다 이 Mac 안의 파일에만 저장해요. 다른 Mac이나 AI는 SSH로 들어와 `AIUsage mcp`로 읽어 가요. 토큰·계정 정보는 넣지 않아요.",
+                          "Saved every 5 seconds to a file on this Mac only. Other Macs or AIs read it over SSH with `AIUsage mcp`. No tokens or account details."))
         }
     }
 }
