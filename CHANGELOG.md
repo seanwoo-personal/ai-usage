@@ -5,6 +5,26 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-03
+
+### Added
+- Click CPU, RAM, SSD or network in the menu bar for details, like Stats: a two-minute chart, a breakdown
+  (CPU system/user/idle, per-core load, load average and uptime; RAM app/wired/compressed/cached/free, swap and
+  memory pressure; disk read/write speed, free space and totals; network interface, local IP and totals) and the
+  busiest processes. Process lists are read only while a detail popover is open.
+- CPU, RAM and SSD turn yellow or red in the menu bar when the Mac is under strain: CPU by its 5-second average
+  (70% / 90%), RAM by free memory as macOS measures it for memory pressure (under 20% / 10%), SSD by space used
+  (90% / 95%). On by default; can be turned off in Settings.
+
+### Changed
+- Each system metric is now its own menu bar item, so it can be clicked and ⌘-dragged on its own.
+- System readings refresh every second (was 2 seconds), matching Stats.
+
+### Fixed
+- The menu bar could redraw itself continuously and keep a CPU core busy: changing a status image made macOS
+  report the menu bar appearance again, which triggered another redraw. It now redraws only when light/dark
+  actually changes or the shown values change.
+
 ## [1.3.0] - 2026-10-03
 
 ### Added
@@ -78,7 +98,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.2.0...v1.2.1
