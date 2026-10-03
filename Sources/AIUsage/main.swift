@@ -120,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             systemItems[m] = nil
         }
         // The monitor also runs, more slowly, when nothing is shown but the status is saved for other tools.
-        monitor.setInterval(metrics.isEmpty ? 5 : 1)
+        monitor.setInterval(metrics.isEmpty ? 5 : SystemMonitor.displayInterval)
         guard !metrics.isEmpty else {
             if settings.shareStatus { if !monitor.isRunning { monitor.start() } } else if monitor.isRunning { monitor.stop() }
             return

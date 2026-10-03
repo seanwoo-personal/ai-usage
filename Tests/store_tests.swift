@@ -389,7 +389,16 @@ enum UpdaterTests {
 }
 
 enum SystemTests {
-    static func run() {
+    @MainActor static func run() {
+        let monitor = SystemMonitor()
+        check(monitor.interval == 0.5, "visible system readings default to half-second sampling")
+        monitor.setInterval(5)
+        check(monitor.interval == 5, "hidden system readings can use five-second sampling")
+        monitor.setInterval(SystemMonitor.displayInterval)
+        monitor.setInterval(0.1)
+        check(monitor.interval == 0.5, "sampling never falls below half a second")
+        check(Double(SystemMonitor.historyLength) * monitor.interval == 120,
+              "half-second samples preserve two minutes of chart history")
         print("System monitor calculations")
         typealias T = SystemMath.CPUTicks
         check(SystemMath.cpuUsage(from: T(user: 100, system: 50, idle: 850, nice: 0), to: T(user: 130, system: 70, idle: 1000, nice: 0)) == 25,

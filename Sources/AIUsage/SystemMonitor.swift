@@ -90,9 +90,9 @@ final class SystemMonitor: ObservableObject {
         }
     }
 
-    /// Same default as Stats: once a second while something is on screen. With nothing shown (for
-    /// example a Mac without a monitor that only keeps its status for other tools) every 5 seconds.
-    private(set) var interval: TimeInterval = 1
+    /// Twice a second while system metrics are visible; every 5 seconds with nothing shown.
+    nonisolated static let displayInterval: TimeInterval = 0.5
+    private(set) var interval: TimeInterval = SystemMonitor.displayInterval
     /// Metrics shown in the menu bar; GPU and temperatures are read every tick only when shown or open.
     var shown: Set<SystemStatusImage.Metric> = []
     /// Internet check per connection, every minute when enabled (Settings).
@@ -103,7 +103,7 @@ final class SystemMonitor: ObservableObject {
     private var lastInternetCheck: Date?
     private var checkingInternet = false
     /// Two minutes of samples for the charts.
-    nonisolated static let historyLength = 120
+    nonisolated static let historyLength = 240
     private var timer: Timer?
     private var lastCPU: SystemMath.CPUTicks?
     private var lastCores: [SystemMath.CPUTicks]?
