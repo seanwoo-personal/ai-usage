@@ -124,6 +124,7 @@ Mac마다 한 줄씩 추가합니다(원격 로그인이 켜져 있어야 하고
 
 도구: `get_status`(전체 요약, `include_history`로 그래프 기록 포함), `get_ai_usage`,
 `get_top_processes`(`by`: cpu·memory·disk, `limit` 1~30). 모두 읽기 전용입니다.
+Claude Code·Codex 등 도구별 연결 방법, 전체 항목, 상태 단계, 문제 해결은 [MCP 안내](mcp.ko.md)에 있습니다.
 
 ## 개인정보와 보안
 

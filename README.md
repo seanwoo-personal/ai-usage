@@ -37,7 +37,7 @@
 - **Respects rate limits**: honours the server's `Retry-After` and never hammers the API.
 - **Updates itself**: checks once a day; one click installs the new version with the same checks as a fresh install.
 - **System status too (optional)**: CPU, RAM, SSD and network speed in a second menu bar item, measured the same way as [Stats](https://github.com/exelban/stats). Off by default.
-- **For AI tools too**: a read-only `status` command and MCP server, so an AI can watch several Macs over SSH. See the [user guide](docs/user-guide.md#use-with-ai-tools-and-scripts-mcp).
+- **For AI tools too**: a read-only `status` command and MCP server, so an AI can watch several Macs over SSH. See the [MCP guide](docs/mcp.md).
 - **Small and private**: no account, no analytics, no server of its own.
 
 ## Install and use

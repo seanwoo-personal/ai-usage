@@ -13,7 +13,7 @@ This directory owns the macOS app. Start at [main.swift](AIUsage/main.swift), wh
 | Login origin / web flow | [WebAccount.swift](AIUsage/WebAccount.swift) | OriginTests, StoreTests; manual web-login check |
 | Menu / copy | [PopoverView.swift](AIUsage/PopoverView.swift), [StatusImage.swift](AIUsage/StatusImage.swift), [L10n.swift](AIUsage/L10n.swift) | SelfTest; both-language visual check |
 | System status (CPU · RAM · SSD · network) | [SystemMonitor.swift](AIUsage/SystemMonitor.swift), [SystemDetails.swift](AIUsage/SystemDetails.swift), [SystemDetailView.swift](AIUsage/SystemDetailView.swift) | SystemTests, crash probes; `--render-details <dir>` off-screen check |
-| Saved status, `status`/`top`/`mcp` commands | [StatusSnapshot.swift](AIUsage/StatusSnapshot.swift), [StatusCLI.swift](AIUsage/StatusCLI.swift) | StatusTests (schema, file mode, MCP protocol); real MCP session over SSH |
+| Saved status, `status`/`top`/`mcp` commands | [StatusSnapshot.swift](AIUsage/StatusSnapshot.swift), [StatusCLI.swift](AIUsage/StatusCLI.swift) | StatusTests (schema, file mode, MCP protocol); real MCP session over SSH; keep [MCP guide](../docs/mcp.md) in sync |
 | Update / startup | [Updater.swift](AIUsage/Updater.swift), [LoginItem.swift](AIUsage/LoginItem.swift) | UpdaterTests, installer tests, startup checks |
 
 Run from repository root after a code change:

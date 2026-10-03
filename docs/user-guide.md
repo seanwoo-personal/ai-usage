@@ -122,6 +122,7 @@ one entry per Mac (Remote Login must be on; Tailscale works well). For example, 
 
 Tools: `get_status` (overview; `include_history` for the chart samples), `get_ai_usage`, and
 `get_top_processes` (`by`: cpu, memory or disk; `limit` 1–30). All are read-only.
+Setup for Claude Code, Codex and other tools, every field, levels and troubleshooting: [MCP guide](mcp.md).
 
 ## Privacy and security
 
