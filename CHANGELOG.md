@@ -5,6 +5,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-04
+
+### Changed
+- Menu bar icons use orange for Claude and green for Codex by default, with lighter shades on dark
+  menu bars for readability. Usage values and reset countdowns retain the black/white appearance colour.
+
 ## [1.7.0] - 2026-10-04
 
 ### Added
@@ -168,7 +174,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.1...v1.6.0

@@ -2,7 +2,7 @@ import AppKit
 
 /// Draws the menu bar item iStat-style: a vertical mini gauge per window, a tiny
 /// provider label on top and the percentage (+ reset countdown) underneath.
-/// Rendered as a template image so it follows light/dark menu bars automatically.
+/// Provider colours distinguish the items; shades follow the menu bar appearance.
 enum StatusImage {
     struct Block {
         var provider: Provider?
@@ -50,8 +50,19 @@ enum StatusImage {
         return "\(hours / 24)d \(hours % 24)h"
     }
 
-    /// `ink == nil` draws a template image (macOS tints it); pass a colour to draw solid, which stays crisp
-    /// on translucent menu bars where template images are shown faded.
+    /// Orange for Claude, green for Codex. Dark bars use lighter shades.
+    static func providerColor(_ provider: Provider, dark: Bool) -> NSColor {
+        switch provider {
+        case .claude:
+            return dark ? NSColor(srgbRed: 0.91, green: 0.51, blue: 0.29, alpha: 1)
+                        : NSColor(srgbRed: 0.72, green: 0.30, blue: 0.13, alpha: 1)
+        case .codex:
+            return dark ? NSColor(srgbRed: 0.32, green: 0.76, blue: 0.50, alpha: 1)
+                        : NSColor(srgbRed: 0.12, green: 0.43, blue: 0.25, alpha: 1)
+        }
+    }
+
+    /// `ink` supplies the appearance and the colour of blocks without a provider.
     static func render(_ blocks: [Block], height: CGFloat = 22, ink inkColor: NSColor? = nil) -> NSImage {
         let ink = inkColor ?? NSColor.black
         let topAttrs: [NSAttributedString.Key: Any] = [
@@ -74,14 +85,20 @@ enum StatusImage {
             return img
         }
 
-        struct Laid { let logo: NSImage?; let fallback: NSAttributedString?; let top: NSAttributedString; let bottom: NSAttributedString; let logoW: CGFloat; let textW: CGFloat }
+        struct Laid { let logo: NSImage?; let fallback: NSAttributedString?; let top: NSAttributedString; let bottom: NSAttributedString; let color: NSColor; let logoW: CGFloat; let textW: CGFloat }
         let laid: [Laid] = blocks.map { b in
+            let color = b.provider.map { providerColor($0, dark: inkColor == .white) } ?? ink
+            func tinted(_ attrs: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+                var result = attrs
+                result[.foregroundColor] = color
+                return result
+            }
             let logo = b.provider.flatMap(Logos.image(for:))
-            let fallback = logo == nil ? b.provider.map { NSAttributedString(string: String($0.barLabel.prefix(2)), attributes: fallbackAttrs) } : nil
+            let fallback = logo == nil ? b.provider.map { NSAttributedString(string: String($0.barLabel.prefix(2)), attributes: tinted(fallbackAttrs)) } : nil
             let top = NSAttributedString(string: b.top, attributes: b.equalLines ? equalAttrs : topAttrs)
             let bottom = NSAttributedString(string: b.bottom, attributes: b.equalLines ? equalAttrs : bottomAttrs)
             let logoW = logo != nil ? logoSize : ceil(fallback?.size().width ?? 0)
-            return Laid(logo: logo, fallback: fallback, top: top, bottom: bottom, logoW: logoW,
+            return Laid(logo: logo, fallback: fallback, top: top, bottom: bottom, color: color, logoW: logoW,
                         textW: ceil(max(top.size().width, bottom.size().width)))
         }
         let width = pad * 2 + laid.reduce(0) { $0 + $1.logoW + logoGap + $1.textW } + CGFloat(laid.count - 1) * blockGap
@@ -92,7 +109,7 @@ enum StatusImage {
                 if let logo = l.logo {
                     let rect = NSRect(x: x, y: (height - logoSize) / 2, width: logoSize, height: logoSize)
                     let tinted = NSImage(size: rect.size, flipped: false) { r in
-                        logo.draw(in: r); ink.set(); r.fill(using: .sourceAtop); return true
+                        logo.draw(in: r); l.color.set(); r.fill(using: .sourceAtop); return true
                     }
                     tinted.draw(in: rect)
                 } else if let f = l.fallback {
@@ -109,7 +126,7 @@ enum StatusImage {
             }
             return true
         }
-        image.isTemplate = inkColor == nil
+        image.isTemplate = inkColor == nil && !blocks.contains { $0.provider != nil }
         return image
     }
 }

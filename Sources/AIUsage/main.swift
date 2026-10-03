@@ -241,20 +241,14 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-preview"), i + 1 < Com
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     var y = h - 4
-    for (idx, img) in images.enumerated() {
+    for idx in images.indices {
         for dark in [false, true] {
             y -= 22
             (dark ? NSColor(white: 0.15, alpha: 1) : NSColor(white: 0.93, alpha: 1)).setFill()
             NSRect(x: 0, y: y, width: w, height: 22).fill()
-            let tinted = NSImage(size: img.size, flipped: false) { r in
-                img.draw(in: r)
-                (dark ? NSColor.white : NSColor.black).set()
-                r.fill(using: .sourceAtop)
-                return true
-            }
-            tinted.draw(at: NSPoint(x: 8, y: y), from: .zero, operation: .sourceOver, fraction: 1)
+            StatusImage.render(samples[idx], ink: dark ? .white : .black)
+                .draw(at: NSPoint(x: 8, y: y), from: .zero, operation: .sourceOver, fraction: 1)
         }
-        _ = idx
     }
     NSGraphicsContext.restoreGraphicsState()
     try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
