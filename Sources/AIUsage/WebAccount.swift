@@ -97,6 +97,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
             let plan = caps.contains("claude_max") ? "max" : caps.contains("claude_pro") ? "pro" : nil
             var snap = try ClaudeProvider.parseUsage(body, plan: plan)
             snap.source = .web
+            snap.accountKey = AccountKey.make(.claude, id: result["account"] as? String)
             return snap
         }
         guard var snap = CodexProvider.parseLive(body) else {
@@ -105,6 +106,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
                 "This ChatGPT account has no Codex limits. They come with paid plans such as Plus or Pro."), kind: .noLimits)
         }
         snap.source = .web
+        snap.accountKey = AccountKey.make(.codex, id: result["account"] as? String)
         return snap
     }
 
@@ -244,7 +246,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
       const paid = o => (o.capabilities || []).some(c => c === 'claude_max' || c === 'claude_pro');
       const org = orgs.find(o => o.uuid === active && paid(o)) || orgs.find(paid) || orgs.find(o => o.uuid === active) || orgs[0];
       const r = await fetch('/api/organizations/' + org.uuid + '/usage', {credentials: 'include'});
-      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text(), caps: org.capabilities || []});
+      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text(), caps: org.capabilities || [], account: org.uuid});
     } catch (e) {
       return JSON.stringify({status: 0, error: String(e)});
     }
@@ -260,7 +262,7 @@ final class WebAccount: NSObject, WKNavigationDelegate {
       const headers = {Authorization: 'Bearer ' + sess.accessToken};
       if (sess.account && sess.account.id) headers['ChatGPT-Account-Id'] = sess.account.id;
       const r = await fetch('/backend-api/wham/usage', {headers, credentials: 'include'});
-      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text()});
+      return JSON.stringify({status: r.status, type: r.headers.get('content-type') || '', retryAfter: r.headers.get('retry-after'), body: await r.text(), account: (sess.account && sess.account.id) || null});
     } catch (e) {
       return JSON.stringify({status: 0, error: String(e)});
     }

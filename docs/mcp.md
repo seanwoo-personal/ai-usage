@@ -145,7 +145,7 @@ Results are JSON text. The disk process list is measured over one second, so it 
                  "interface": "Ethernet", "local_ip": "192.168.0.10" }
   },
   "ai_usage": [
-    { "provider": "claude", "connection": "cli", "plan": "max", "fetched_at": "2026-10-03T13:44:02Z",
+    { "provider": "claude", "account_key": "0f3a9c51d2e47b86", "connection": "cli", "plan": "max", "fetched_at": "2026-10-03T13:44:02Z",
       "windows": [
         { "kind": "session_5h", "label": "5-hour session", "used_percent": 19, "remaining_percent": 81,
           "resets_at": "2026-10-03T17:30:00Z", "window_minutes": 300 },
@@ -157,6 +157,7 @@ Results are JSON text. The disk process list is measured over one second, so it 
 
 - `source`: `app` means the app saved it within the last 30 seconds. `live` means the app isn't running, so system values were measured on the spot and `ai_usage` is the last saved value (see `fetched_at`).
 - `ai_usage`: connected services only; `null` if this Mac has never saved any. `error` explains a failed read.
+- `account_key`: a one-way label of the account (16 hex characters made from the service's account or organization ID with SHA-256). The same account gives the same label on every Mac, whether connected on the web or through the CLI. The ID itself is never included and can't be recovered from the label.
 - `kind`: `session_5h`, `weekly`, `weekly_model` (one model's weekly limit) or `other`. `label` is in that Mac's language.
 - A window whose reset time has passed shows 0% used and no reset time, as in the app.
 - Times are UTC in ISO 8601 (`2026-10-03T13:45:10Z`).
@@ -164,6 +165,13 @@ Results are JSON text. The disk process list is measured over one second, so it 
 - With `include_history`, `system.history` holds samples every `interval_seconds` (1 s when the Mac shows system items in its menu bar, otherwise 5 s): CPU, memory, disk read/write, download/upload.
 - `schema_version` changes only when an existing field changes meaning or name. New fields may appear within the same version.
 </details>
+
+### Several Macs on one account
+
+If several Macs use the same Claude or Codex account, their usage entries are identical. Entries with the same
+`provider` and `account_key` are one account: show them once, preferably the one with the latest `fetched_at`.
+Different labels mean different accounts, so this keeps working if the Macs later use separate accounts.
+The MCP server says the same to AI clients in its instructions.
 
 ## Reading it yourself
 
@@ -187,7 +195,7 @@ ssh m1 "'/Applications/AI Usage.app/Contents/MacOS/AIUsage' status"
 
 - **Nothing listens.** The MCP server runs only while an AI tool's SSH session is open and exits when it ends.
 - **Read-only.** All three tools only read.
-- **No secrets.** The status file and results never contain tokens, cookies, passwords or e-mail addresses. The file is readable by your account only (mode 0600).
+- **No secrets.** The status file and results never contain tokens, cookies, passwords, e-mail addresses or account IDs (only the one-way `account_key`). The file is readable by your account only (mode 0600).
 - **Process names are untrusted.** Any program can choose its own name, so names are cut to one line, stripped of invisible characters and limited to 64 characters, and AI clients are told that reported text is data, never instructions.
 - Don't want the file? Turn status saving off in Settings; the saved file is deleted too.
 

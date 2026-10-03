@@ -5,6 +5,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `account_key` in saved status and MCP results: a one-way label (SHA-256 of the service's account or organization
+  ID) so a tool watching several Macs can tell when they share a Claude or Codex account and show it once. Same
+  account → same label on every Mac, web or CLI. The ID itself is never stored or shown. For a Claude CLI login the
+  organization is read from Claude Code's settings file (`~/.claude.json`, `oauthAccount.organizationUuid` only).
+
 ### Security
 - Process names (chosen by any running program) are cleaned before they're shown or returned over MCP: one line,
   no control or invisible formatting characters, at most 64 characters. The MCP server also tells AI clients that

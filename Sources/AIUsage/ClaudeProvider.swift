@@ -83,7 +83,9 @@ final class ClaudeProvider: @unchecked Sendable {
         default: throw ProviderError.server(status)
         }
 
-        return try Self.parseUsage(data, plan: creds.subscriptionType)
+        var snap = try Self.parseUsage(data, plan: creds.subscriptionType)
+        snap.accountKey = AccountKey.claudeCodeKey()
+        return snap
     }
 
     static func parseUsage(_ data: Data, plan: String?) throws -> ProviderSnapshot {

@@ -23,13 +23,13 @@ final class CodexProvider: @unchecked Sendable {
     func fetch() async throws -> ProviderSnapshot {
         var liveError: Error?
         do {
-            if let snap = try await fetchLive() { return snap }
+            if var snap = try await fetchLive() { snap.accountKey = accountKey(); return snap }
         } catch let e as ProviderError where e.kind == .rateLimited {
             throw e   // keep the server's wait; older log numbers mustn't hide that live checks are paused
         } catch {
             liveError = error
         }
-        if let snap = latestFromLogs() { return snap }
+        if var snap = latestFromLogs() { snap.accountKey = accountKey(); return snap }
 
         if let e = liveError { throw ProviderError.wrap(e) }
         let hasAuth = FileManager.default.fileExists(atPath: codexHome.appendingPathComponent("auth.json").path)
@@ -38,6 +38,11 @@ final class CodexProvider: @unchecked Sendable {
                                          "Codex CLI is logged in with an API key, which has no plan limits. Log in on the web instead."), kind: .cliMissing)
             : ProviderError(message: L.t("이 Mac에서 Codex CLI 로그인 정보를 찾지 못했어요. 웹으로 로그인해 주세요.",
                                          "No Codex CLI login on this Mac. Log in on the web instead."), kind: .cliMissing)
+    }
+
+    private func accountKey() -> String? {
+        (try? Data(contentsOf: codexHome.appendingPathComponent("auth.json")))
+            .flatMap(AccountKey.codexAccount).flatMap { AccountKey.make(.codex, id: $0) }
     }
 
     // MARK: - Live

@@ -96,6 +96,8 @@ struct StatusSnapshot: Codable, Equatable {
 
     struct AIUsageStatus: Codable, Equatable {
         var provider: String
+        /// Same value on every Mac using the same account (one-way; see `AccountKey`). nil if unknown.
+        var accountKey: String?
         var connection: String
         var plan: String?
         var fetchedAt: Date?
@@ -341,7 +343,7 @@ extension StatusSnapshot {
                          remainingPercent: w.usedPercent.isFinite ? w.remainingPercent : nil,
                          resetsAt: w.resetsAt, windowMinutes: w.windowMinutes)
         }
-        return .init(provider: provider.rawValue, connection: connection.rawValue, plan: snapshot?.plan,
+        return .init(provider: provider.rawValue, accountKey: snapshot?.accountKey, connection: connection.rawValue, plan: snapshot?.plan,
                      fetchedAt: snapshot?.fetchedAt, windows: windows, error: error?.message)
     }
 }

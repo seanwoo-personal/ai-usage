@@ -129,10 +129,10 @@ Setup for Claude Code, Codex and other tools, every field, levels and troublesho
 - **Only usage numbers are kept**: remaining percentage and reset times. Conversations, files and billing details are never stored or sent.
 - **No developer server.** Your login is used only with Anthropic's and OpenAI's own servers (claude.ai, api.anthropic.com, chatgpt.com), to sign in and ask for usage.
 - **Passwords go straight to the official login page.** The app never reads or stores them. The login window tells you whether you're on the service itself, a sign-in step (Google, Apple, Microsoft), or somewhere else.
-- **CLI logins are read, never changed.** Claude Code's Keychain item and Codex's `auth.json` are only read. If Codex's live check fails, the app reads the end of Codex's session logs (`~/.codex/sessions`) and extracts the usage figures only.
+- **CLI logins are read, never changed.** Claude Code's Keychain item and Codex's `auth.json` are only read. From Claude Code's settings file (`~/.claude.json`) only the organization ID is read, to make the one-way `account_key`. If Codex's live check fails, the app reads the end of Codex's session logs (`~/.codex/sessions`) and extracts the usage figures only.
 - **Disconnecting** erases that service's login stored in the app. Google/Apple sign-in data is shared by both services and is erased once no service is connected through the web. Claude Code's and Codex's own logins are never touched.
 - **System section** (if you turn it on) reads this Mac's CPU, memory, disk and network counters locally; nothing is sent anywhere. The detail popovers list process names (via `ps` and the process-usage API) only while they are open.
-- **Saved status** (for `AIUsage status` / `mcp`) stays in a file only your account can read; nothing listens on the network. Other Macs can read it only through SSH access you already granted.
+- **Saved status** (for `AIUsage status` / `mcp`) stays in a file only your account can read and labels accounts only with a one-way `account_key`, never their IDs; nothing listens on the network. Other Macs can read it only through SSH access you already granted.
 - **Update checks** contact GitHub (`api.github.com`) once a day; you can turn this off.
 
 Found a security issue? Please report it privately; see [SECURITY.md](../SECURITY.md).

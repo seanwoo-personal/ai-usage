@@ -130,6 +130,8 @@ struct ProviderSnapshot {
     var plan: String?
     var source: DataSource
     var fetchedAt: Date
+    /// One-way label of the account this came from (see `AccountKey`); nil when unknown.
+    var accountKey: String? = nil
 
     func window(_ match: (WindowKind) -> Bool) -> UsageWindow? {
         windows.first { match($0.kind) }
