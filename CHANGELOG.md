@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-03
+
 ### Added
 - `account_key` in saved status and MCP results: a one-way label (SHA-256 of the service's account or organization
   ID) so a tool watching several Macs can tell when they share a Claude or Codex account and show it once. Same
@@ -129,7 +131,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.3.0...v1.4.0
