@@ -10,6 +10,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
   calculated the same way as [Stats](https://github.com/exelban/stats). Off by default; turn it on in Settings and
   pick which metrics to show. Uses only built-in macOS interfaces (no helper tool, admin rights or permissions).
 
+### Fixed
+- Menu bar text looked faded on translucent (light-tinted) menu bars. It is now drawn in solid white or black to
+  match the menu bar, and redrawn when the menu bar switches between light and dark.
+
 ## [1.2.2] - 2026-10-02
 
 ### Changed

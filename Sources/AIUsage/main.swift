@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = SystemMonitor()
     private let popover = NSPopover()
     private var bag = Set<AnyCancellable>()
+    private var appearanceWatch: [NSKeyValueObservation] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -39,6 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &bag)
         updateSystemItem()
 
+        // Solid-colour images must be redrawn when the menu bar switches between light and dark.
+        appearanceWatch.append(statusItem.button!.observe(\.effectiveAppearance) { [weak self] _, _ in
+            Task { @MainActor in self?.redraw(); self?.updateSystemItem() }
+        })
+
         LoginItem.reconcileAtLaunch()
         redraw()
         store.start()
@@ -62,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func redraw() {
         let blocks = StatusImage.blocks(store: store, settings: settings)
-        statusItem.button?.image = StatusImage.render(blocks)
+        statusItem.button?.image = StatusImage.render(blocks, ink: MenuBarInk.color(for: statusItem.button))
         statusItem.button?.toolTip = zip(store.activeProviders, blocks)
             .map { "\($0.displayName) \($1.bottom) · \($1.top)" }.joined(separator: "\n")
     }
@@ -82,10 +88,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.button?.action = #selector(togglePopover(_:))
             item.button?.imagePosition = .imageOnly
             systemItem = item
+            appearanceWatch.append(item.button!.observe(\.effectiveAppearance) { [weak self] _, _ in
+                Task { @MainActor in self?.updateSystemItem() }
+            })
         }
         if !monitor.isRunning { monitor.start() }
         let r = monitor.reading
-        systemItem?.button?.image = SystemStatusImage.render(r, metrics: metrics)
+        systemItem?.button?.image = SystemStatusImage.render(r, metrics: metrics, ink: MenuBarInk.color(for: systemItem?.button))
         systemItem?.button?.toolTip = "CPU \(SystemMath.percentText(r.cpu)) · RAM \(SystemMath.percentText(r.memory)) · SSD \(SystemMath.percentText(r.disk))\n↑ \(SystemMath.rateText(r.upload))  ↓ \(SystemMath.rateText(r.download))"
     }
 

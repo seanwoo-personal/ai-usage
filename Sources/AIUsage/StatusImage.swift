@@ -50,8 +50,10 @@ enum StatusImage {
         return "\(hours / 24)d \(hours % 24)h"
     }
 
-    static func render(_ blocks: [Block], height: CGFloat = 22) -> NSImage {
-        let ink = NSColor.black
+    /// `ink == nil` draws a template image (macOS tints it); pass a colour to draw solid, which stays crisp
+    /// on translucent menu bars where template images are shown faded.
+    static func render(_ blocks: [Block], height: CGFloat = 22, ink inkColor: NSColor? = nil) -> NSImage {
+        let ink = inkColor ?? NSColor.black
         let topAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold), .foregroundColor: ink,
         ]
@@ -88,7 +90,11 @@ enum StatusImage {
             var x = pad
             for l in laid {
                 if let logo = l.logo {
-                    logo.draw(in: NSRect(x: x, y: (height - logoSize) / 2, width: logoSize, height: logoSize))
+                    let rect = NSRect(x: x, y: (height - logoSize) / 2, width: logoSize, height: logoSize)
+                    let tinted = NSImage(size: rect.size, flipped: false) { r in
+                        logo.draw(in: r); ink.set(); r.fill(using: .sourceAtop); return true
+                    }
+                    tinted.draw(in: rect)
                 } else if let f = l.fallback {
                     f.draw(at: NSPoint(x: x, y: (height - f.size().height) / 2))
                 }
@@ -103,7 +109,7 @@ enum StatusImage {
             }
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = inkColor == nil
         return image
     }
 }
@@ -124,9 +130,9 @@ enum SystemStatusImage {
         }
     }
 
-    static func render(_ r: SystemMonitor.Reading, metrics: [Metric], height: CGFloat = 22) -> NSImage? {
+    static func render(_ r: SystemMonitor.Reading, metrics: [Metric], height: CGFloat = 22, ink inkColor: NSColor? = nil) -> NSImage? {
         guard !metrics.isEmpty else { return nil }
-        let ink = NSColor.black
+        let ink = inkColor ?? NSColor.black
         let labelAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 8.5, weight: .semibold), .foregroundColor: ink.withAlphaComponent(0.85),
         ]
@@ -164,7 +170,15 @@ enum SystemStatusImage {
             }
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = inkColor == nil
         return image
+    }
+}
+
+/// Solid text colour for the menu bar, from the status button's current appearance.
+enum MenuBarInk {
+    @MainActor static func color(for button: NSStatusBarButton?) -> NSColor {
+        let dark = button?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return dark ? .white : .black
     }
 }
