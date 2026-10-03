@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-03
+
 ### Security
 - Disk, volume, drive, GPU, sensor, interface and host names are cleaned like process names before they're saved
   or returned over MCP (one line, no invisible characters, at most 64 characters), since other people or devices can
@@ -153,7 +155,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/seanwoo-personal/ai-usage/compare/v1.4.1...v1.5.0
