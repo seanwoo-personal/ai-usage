@@ -32,11 +32,16 @@ zip_app() { (cd "$1" && ditto -c -k --keepParent "AI Usage.app" "$2"); }
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 
 # Fixtures
-mkdir -p "$T/good" "$T/wrongid" "$T/noexe" "$T/tampered" "$T/fx"
+mkdir -p "$T/good" "$T/wrongid" "$T/noexe" "$T/tampered" "$T/wrongarch" "$T/fx"
 make_app "$T/good" com.sean.aiusage 9.9.9;            zip_app "$T/good" "$T/fx/good.zip"
 make_app "$T/wrongid" com.example.other 9.9.9;        zip_app "$T/wrongid" "$T/fx/wrongid.zip"
 make_app "$T/noexe" com.sean.aiusage 9.9.9; rm "$T/noexe/AI Usage.app/Contents/MacOS/AIUsage"; zip_app "$T/noexe" "$T/fx/noexe.zip"
 make_app "$T/tampered" com.sean.aiusage 9.9.9; printf 'x' >> "$T/tampered/AI Usage.app/Contents/MacOS/AIUsage"; zip_app "$T/tampered" "$T/fx/tampered.zip"
+# Executable built only for the other CPU type (x86_64 on Apple Silicon, arm64 on Intel).
+other_arch=arm64; [[ "$(uname -m)" == "arm64" ]] && other_arch=x86_64
+make_app "$T/wrongarch" com.sean.aiusage 9.9.9
+lipo /usr/bin/true -thin "$other_arch" -output "$T/wrongarch/AI Usage.app/Contents/MacOS/AIUsage"
+codesign --force --sign - "$T/wrongarch/AI Usage.app" >/dev/null 2>&1; zip_app "$T/wrongarch" "$T/fx/wrongarch.zip"
 : > "$T/fx/empty.zip"
 head -c 4096 /dev/urandom > "$T/fx/corrupt.zip"
 python3 - "$T/fx" <<'PY'
@@ -88,6 +93,18 @@ expect_fail "tampered after signing"    "$T/fx/tampered.zip"
 expect_fail "path traversal entry"      "$T/fx/traversal.zip"
 expect_fail "extra top-level app"       "$T/fx/extra.zip"
 expect_fail "symlink in archive"        "$T/fx/symlink.zip"
+expect_fail "app for the other CPU type" "$T/fx/wrongarch.zip"
+
+# A Mac without developer tools: lipo, xcrun and friends fail there. The installer must not need them.
+mkdir -p "$T/nodevtools"
+for tool in lipo xcrun otool clang cc git; do
+  printf '#!/bin/sh\necho "xcode-select: note: No developer tools were found" >&2\nexit 1\n' > "$T/nodevtools/$tool"
+  chmod +x "$T/nodevtools/$tool"
+done
+fresh_dest
+if PATH="$T/nodevtools:$PATH" run "$T/fx/good.zip" && ! old_kept && no_litter; then
+  ok "Mac without developer tools → installs normally"
+else bad "Mac without developer tools: install failed"; cat "$T/out.txt"; fi
 
 fresh_dest; chmod 555 "$DEST"
 if run "$T/fx/good.zip"; then bad "read-only install folder: should have failed"

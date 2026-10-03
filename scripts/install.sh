@@ -113,8 +113,10 @@ check_app() {   # $1 = app path
   [[ "$v" == "$BUNDLE_ID" ]] || fail "앱 식별자가 달라요($v). 설치하지 않았어요."
   v="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist" 2>/dev/null || true)"
   [[ "$v" == "$EXE" && -x "$a/Contents/MacOS/$EXE" ]] || fail "앱 실행 파일이 없어요. 설치하지 않았어요."
+  # /usr/bin/file ships with macOS. Not lipo: it needs the developer tools, and on Macs without them
+  # it fails (and asks to install them), which refused every install there.
   local arch_ok='^x86_64h?$'; [[ "$(uname -m)" == "arm64" ]] && arch_ok='^arm64e?$'
-  lipo -archs "$a/Contents/MacOS/$EXE" 2>/dev/null | tr ' ' '\n' | grep -qE "$arch_ok" \
+  /usr/bin/file -b "$a/Contents/MacOS/$EXE" 2>/dev/null | grep -oE 'arm64e?|x86_64h?' | grep -qE "$arch_ok" \
     || fail "이 Mac($(uname -m))에서 실행할 수 없는 앱이에요."
   v="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$plist" 2>/dev/null || echo 13.0)"
   (( OS_MAJOR >= ${v%%.*} )) || fail "이 앱은 macOS $v 이상이 필요해요. 지금 버전: $OS_VERSION"

@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Installing or updating failed on Macs without the Xcode command line developer tools ("can't run on this Mac"),
+  and could prompt to install them. The CPU-type check now uses the built-in `file` command instead of `lipo`.
+  Affected the one-line install and in-app updates since 1.2.0.
+
 ## [1.4.0] - 2026-10-03
 
 ### Added
