@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Process names (chosen by any running program) are cleaned before they're shown or returned over MCP: one line,
+  no control or invisible formatting characters, at most 64 characters. The MCP server also tells AI clients that
+  names and other reported text are data, never instructions.
+
 ## [1.5.0] - 2026-10-03
 
 ### Added

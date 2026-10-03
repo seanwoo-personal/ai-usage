@@ -12,6 +12,23 @@ struct ProcessUsage: Identifiable, Equatable {
     let name: String
     let value: Double        // CPU %, memory bytes, or disk bytes per second
     var id: Int32 { pid }
+
+    init(pid: Int32, name: String, value: Double) {
+        self.pid = pid
+        self.name = Self.cleanName(name)
+        self.value = value
+    }
+
+    /// Process names are chosen by whatever program is running, and they reach AI tools through MCP.
+    /// Keep them short, single-line and free of control or invisible formatting characters.
+    static func cleanName(_ raw: String) -> String {
+        let scalars = raw.unicodeScalars.filter { s in
+            !CharacterSet.controlCharacters.contains(s) && !CharacterSet.newlines.contains(s)
+                && s.properties.generalCategory != .format   // zero-width and bidi overrides
+        }
+        let name = String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespaces)
+        return name.count > 64 ? String(name.prefix(63)) + "…" : name
+    }
 }
 
 extension SystemMath {
