@@ -60,8 +60,7 @@ struct VolumeReading: Codable, Equatable {
 
 struct WiFiReading: Codable, Equatable {
     var interface: String
-    /// Needs Location Services permission on macOS 14+; nil otherwise (no prompt is shown).
-    var ssid: String?
+    // No network name (SSID): it needs Location permission, and anyone nearby can choose it.
     var rssiDbm: Int?
     var noiseDbm: Int?
     var channel: Int?
@@ -140,7 +139,7 @@ enum HardwareMath {
 
     /// GPU figures from an IOAccelerator `PerformanceStatistics` dictionary.
     static func gpu(stats: [String: Any], model: String?, cores: Int?) -> GPUReading {
-        GPUReading(model: model, cores: cores,
+        GPUReading(model: model.map(UntrustedText.clean), cores: cores,
                    utilizationPercent: percent(stats["Device Utilization %"]),
                    rendererPercent: percent(stats["Renderer Utilization %"]),
                    tilerPercent: percent(stats["Tiler Utilization %"]),
@@ -182,7 +181,7 @@ enum HardwareMath {
         let units: (UInt64) -> UInt64 = { $0.multipliedReportingOverflow(by: 512_000).overflow ? .max : $0 * 512_000 }
         let level: SystemLevel = warning != 0 || (threshold > 0 && spare < threshold) || used >= 100 ? .critical
                                 : used >= 80 || counter(160) > 0 ? .warning : .normal
-        return DriveHealth(model: model, level: level.name,
+        return DriveHealth(model: model.map(UntrustedText.clean), level: level.name,
                            temperatureC: kelvin > 200 && kelvin < 400 ? kelvin - 273 : nil,
                            percentageUsed: used <= 255 ? used : nil,
                            availableSparePercent: spare <= 100 ? spare : nil,
@@ -326,7 +325,7 @@ enum HardwareProbe {
             guard let name = copyProperty(s, "Product" as CFString)?.takeRetainedValue() as? String,
                   let event = copyEvent(s, 15, 0, 0)?.takeRetainedValue() else { continue }
             let c = getFloat(event, 15 << 16)
-            if HardwareMath.validTemperature(c) { out.append(.init(name: name, celsius: (c * 10).rounded() / 10)) }
+            if HardwareMath.validTemperature(c) { out.append(.init(name: UntrustedText.clean(name), celsius: (c * 10).rounded() / 10)) }
         }
         return out.sorted { $0.name < $1.name }
     }
@@ -454,9 +453,9 @@ enum HardwareProbe {
             let isStartup = url.path == "/"
             let free = isStartup ? (v.volumeAvailableCapacityForImportantUsage ?? Int64(v.volumeAvailableCapacity ?? 0))
                                  : Int64(v.volumeAvailableCapacity ?? 0)
-            return VolumeReading(name: v.volumeName ?? url.lastPathComponent, totalBytes: Int64(total), freeBytes: free,
+            return VolumeReading(name: UntrustedText.clean(v.volumeName ?? url.lastPathComponent), totalBytes: Int64(total), freeBytes: free,
                                  usedPercent: SystemMath.diskUsedPercent(total: Int64(total), available: free),
-                                 fileSystem: v.volumeLocalizedFormatDescription, isInternal: v.volumeIsInternal,
+                                 fileSystem: v.volumeLocalizedFormatDescription.map(UntrustedText.clean), isInternal: v.volumeIsInternal,
                                  isRemovable: v.volumeIsRemovable, isStartup: isStartup)
         }
     }
@@ -473,7 +472,7 @@ enum HardwareProbe {
         default: band = HardwareMath.band(channel: channel?.channelNumber)
         }
         // Not associated: still report the interface so a reader knows Wi-Fi is on but idle.
-        return WiFiReading(interface: name, ssid: iface.ssid(), rssiDbm: rssi == 0 ? nil : rssi, noiseDbm: noise == 0 ? nil : noise,
+        return WiFiReading(interface: UntrustedText.clean(name), rssiDbm: rssi == 0 ? nil : rssi, noiseDbm: noise == 0 ? nil : noise,
                            channel: channel?.channelNumber, bandGhz: band,
                            transmitRateMbps: iface.transmitRate() > 0 ? iface.transmitRate() : nil)
     }

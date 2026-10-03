@@ -172,7 +172,7 @@ Results are JSON text. The disk process list is measured over one second, and th
   - `system.sensors`: `cpu_average_c`, `cpu_max_c`, `ssd_c`, `battery_c`, `fans` (`rpm`, `min_rpm`, `max_rpm`), `system_power_watts`, `level`, and every sensor in `temperatures`.
   - `system.drives`: SSD health per drive: `percentage_used` (of rated life), `available_spare_percent`, `temperature_c`, `power_on_hours`, `power_cycles`, `unsafe_shutdowns`, `media_errors`, lifetime `data_read_bytes` / `data_written_bytes`, `level`.
   - `system.volumes`: every mounted disk with `total_bytes`, `free_bytes`, `used_percent`, `file_system`, `is_internal`, `is_removable`, `is_startup`.
-  - `system.wifi`: `interface`, `rssi_dbm` (signal), `noise_dbm`, `channel`, `band_ghz`, `transmit_rate_mbps`. `ssid` stays empty unless the app has Location permission, which it never asks for.
+  - `system.wifi`: `interface`, `rssi_dbm` (signal), `noise_dbm`, `channel`, `band_ghz`, `transmit_rate_mbps`. The network name (SSID) is not included: it needs Location permission and anyone nearby can choose it.
   - `system.battery` (laptops): `percent`, `charging`, `plugged_in`, `minutes_remaining`, `cycle_count`, `health_percent`, `temperature_c`.
 - `schema_version` changes only when an existing field changes meaning or name. New fields may appear within the same version.
 </details>
@@ -208,7 +208,7 @@ ssh m1 "'/Applications/AI Usage.app/Contents/MacOS/AIUsage' status"
 - **Read-only.** All three tools only read.
 - **No secrets.** The status file and results never contain tokens, cookies, passwords, e-mail addresses or account IDs (only the one-way `account_key`). The file is readable by your account only (mode 0600).
 - **Temperatures, fans and power** use private but long-stable macOS interfaces (the same ones Stats uses). They only read; no admin rights or helper tool. If a macOS update changes them, those values are just missing.
-- **Process names are untrusted.** Any program can choose its own name, so names are cut to one line, stripped of invisible characters and limited to 64 characters, and AI clients are told that reported text is data, never instructions.
+- **Names are untrusted.** Any program chooses its own process name, and whoever names a USB drive or device chooses those names, so they are cut to one line, stripped of invisible characters and limited to 64 characters, and AI clients are told that reported text is data, never instructions.
 - Don't want the file? Turn status saving off in Settings; the saved file is deleted too.
 
 ## Troubleshooting

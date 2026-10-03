@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Disk, volume, drive, GPU, sensor, interface and host names are cleaned like process names before they're saved
+  or returned over MCP (one line, no invisible characters, at most 64 characters), since other people or devices can
+  choose them. The Wi-Fi network name (SSID) is no longer read at all.
+
 ## [1.6.0] - 2026-10-03
 
 ### Added

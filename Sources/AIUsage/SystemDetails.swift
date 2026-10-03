@@ -21,7 +21,13 @@ struct ProcessUsage: Identifiable, Equatable {
 
     /// Process names are chosen by whatever program is running, and they reach AI tools through MCP.
     /// Keep them short, single-line and free of control or invisible formatting characters.
-    static func cleanName(_ raw: String) -> String {
+    static func cleanName(_ raw: String) -> String { UntrustedText.clean(raw) }
+}
+
+/// Text that someone other than the user can choose (process, disk, device and sensor names) and that
+/// reaches AI tools through MCP: one line, no control or invisible formatting characters, at most 64 characters.
+enum UntrustedText {
+    static func clean(_ raw: String) -> String {
         let scalars = raw.unicodeScalars.filter { s in
             !CharacterSet.controlCharacters.contains(s) && !CharacterSet.newlines.contains(s)
                 && s.properties.generalCategory != .format   // zero-width and bidi overrides

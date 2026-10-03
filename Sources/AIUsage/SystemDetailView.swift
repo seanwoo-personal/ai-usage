@@ -246,7 +246,6 @@ struct SystemDetailView: View {
             }
             if let w = d.wifi {
                 Section("Wi-Fi") {
-                    if let ssid = w.ssid { Row(L.t("네트워크", "Network"), ssid) }
                     Row(L.t("신호", "Signal"), w.rssiDbm.map { "\($0) dBm" } ?? L.t("연결 안 됨", "Not connected"))
                     if let n = w.noiseDbm { Row(L.t("잡음", "Noise"), "\(n) dBm") }
                     if let c = w.channel { Row(L.t("채널", "Channel"), "\(c)" + (w.bandGhz.map { " · " + String(format: $0 == 2.4 ? "%.1f GHz" : "%.0f GHz", $0) } ?? "")) }

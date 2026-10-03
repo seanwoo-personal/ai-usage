@@ -345,7 +345,7 @@ extension SystemProbe {
         let name = (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? info.hostName
         // perflevel0 = performance cores, perflevel1 = efficiency cores (Apple Silicon only).
         let p = sysctlInt("hw.perflevel0.logicalcpu"), e = sysctlInt("hw.perflevel1.logicalcpu")
-        return .init(name: name, model: sysctlString("hw.model"), chip: sysctlString("machdep.cpu.brand_string"),
+        return .init(name: UntrustedText.clean(name), model: sysctlString("hw.model"), chip: sysctlString("machdep.cpu.brand_string"),
                      cpuCores: info.activeProcessorCount, performanceCores: e == nil ? nil : p, efficiencyCores: e,
                      memoryBytes: info.physicalMemory,
                      macosVersion: "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)",
@@ -423,7 +423,7 @@ extension StatusSnapshot {
                         readSinceBootBytes: diskTotals?.read, writtenSinceBootBytes: diskTotals?.written),
             network: .init(downloadBytesPerSecond: download, uploadBytesPerSecond: upload,
                            receivedSinceBootBytes: netTotals?.received, sentSinceBootBytes: netTotals?.sent,
-                           interface: interface, localIp: localIP),
+                           interface: interface.map(UntrustedText.clean), localIp: localIP),
             history: history)
     }
 
