@@ -452,6 +452,9 @@ struct SystemSettings: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .padding(.leading, 18)
             }
+            Toggle(L.t("인터넷 연결 확인 (유선·Wi-Fi 따로)", "Check internet connection (wired and Wi-Fi)"), isOn: $settings.internetCheck)
+                .help(L.t("1분마다 유선 랜과 Wi-Fi 각각으로 Apple 연결 확인 서버(captive.apple.com)에 접속해 인터넷이 되는지와 응답 속도를 확인해요. macOS도 쓰는 서버예요.",
+                          "Every minute, wired LAN and Wi-Fi are each tested against Apple's connectivity check (captive.apple.com), the server macOS itself uses."))
             Toggle(L.t("다른 AI·도구가 이 Mac 상태를 읽을 수 있게 저장", "Save this Mac's status for other AI tools"), isOn: $settings.shareStatus)
                 .help(L.t("5초마다 이 Mac 안의 파일에만 저장해요. 다른 Mac이나 AI는 SSH로 들어와 `AIUsage mcp`로 읽어 가요. 토큰·계정 정보는 넣지 않아요.",
                           "Saved every 5 seconds to a file on this Mac only. Other Macs or AIs read it over SSH with `AIUsage mcp`. No tokens or account details."))

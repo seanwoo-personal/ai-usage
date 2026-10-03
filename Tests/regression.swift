@@ -132,7 +132,7 @@ enum Regression {
         codexLogTests()
     }
 
-    @MainActor static func runAsync() async { await StoreTests.run(); CredentialTests.run(); OriginTests.run(); UpdaterTests.run(); SystemTests.run(); StatusTests.run(); HardwareTests.run() }
+    @MainActor static func runAsync() async { await StoreTests.run(); CredentialTests.run(); OriginTests.run(); UpdaterTests.run(); SystemTests.run(); StatusTests.run(); HardwareTests.run(); ConnectivityTests.run() }
 
     // MARK: Codex log fixtures
 

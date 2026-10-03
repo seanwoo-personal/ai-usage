@@ -5,6 +5,17 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Internet check per connection (Settings, off by default): every minute wired LAN and Wi-Fi are each tested,
+  forced through their own interface, against Apple's connectivity page (captive.apple.com, which macOS itself uses).
+  Shows online / no internet / login page and response time per connection, marks the main connection, and gives
+  the Mac an overall state (ok, degraded when the main connection is down but another works, offline). In the network
+  popover, saved status / MCP (`network.internet`), `status`, and as a yellow/red network item in the menu bar.
+
+### Fixed
+- After an install or update the app sometimes didn't reopen: right after the old copy quit, macOS could still list it
+  as running, so `open` did nothing. The installer now confirms the new copy is running and opens it again if not.
+
 ## [1.6.1] - 2026-10-03
 
 ### Security

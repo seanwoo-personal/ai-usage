@@ -43,6 +43,9 @@ final class AppSettings: ObservableObject {
     @Published var showSystem: Bool { didSet { d.set(showSystem, forKey: "showSystem") } }
     /// Save this Mac's status for other tools (`AIUsage status`, `AIUsage mcp`). On by default; local file only.
     @Published var shareStatus: Bool { didSet { d.set(shareStatus, forKey: "shareStatus") } }
+    /// Check every minute whether wired LAN and Wi-Fi each reach the internet (contacts captive.apple.com). Off by default.
+    @Published var internetCheck: Bool { didSet { d.set(internetCheck, forKey: Self.internetCheckKey) } }
+    static let internetCheckKey = "internetCheck"
     /// Colour CPU / RAM / SSD yellow or red when the Mac is under strain (on by default).
     @Published var systemColors: Bool { didSet { d.set(systemColors, forKey: "systemColors") } }
     @Published var systemMetrics: Set<SystemStatusImage.Metric> {
@@ -54,7 +57,7 @@ final class AppSettings: ObservableObject {
     init(defaults d: UserDefaults = .standard) {
         self.d = d
         d.register(defaults: ["showRemaining": true, "showResetInBar": true, "refreshMinutes": 3, "onboarded": false,
-                              "showSystem": false, "systemColors": true, "shareStatus": true, "systemMetrics": SystemStatusImage.Metric.defaults.map(\.rawValue)])
+                              "showSystem": false, "systemColors": true, "shareStatus": true, "internetCheck": false, "systemMetrics": SystemStatusImage.Metric.defaults.map(\.rawValue)])
         barModes = Dictionary(uniqueKeysWithValues: Provider.allCases.map { p in
             (p, BarMode(rawValue: d.string(forKey: "barMode.\(p.rawValue)") ?? "") ?? .weekly)
         })
@@ -71,6 +74,7 @@ final class AppSettings: ObservableObject {
         showSystem = d.bool(forKey: "showSystem")
         systemColors = d.bool(forKey: "systemColors")
         shareStatus = d.bool(forKey: "shareStatus")
+        internetCheck = d.bool(forKey: Self.internetCheckKey)
         systemMetrics = Set((d.stringArray(forKey: "systemMetrics") ?? []).compactMap(SystemStatusImage.Metric.init(rawValue:)))
     }
 

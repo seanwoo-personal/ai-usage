@@ -28,9 +28,10 @@ final class SystemMonitor: ObservableObject {
             case .memory: return memoryLevel
             case .disk: return diskLevel
             case .sensors: return temperatureLevel
-            case .network: return .normal
+            case .network: return internetLevel
             }
         }
+        var internetLevel = SystemLevel.normal
     }
 
     /// Extra readings for the detail popovers. Filled only while a popover is open.
@@ -94,6 +95,13 @@ final class SystemMonitor: ObservableObject {
     private(set) var interval: TimeInterval = 1
     /// Metrics shown in the menu bar; GPU and temperatures are read every tick only when shown or open.
     var shown: Set<SystemStatusImage.Metric> = []
+    /// Internet check per connection, every minute when enabled (Settings).
+    var internetCheckEnabled = false {
+        didSet { if internetCheckEnabled != oldValue { lastInternetCheck = nil; if !internetCheckEnabled { refreshConnections() } } }
+    }
+    @Published private(set) var internet: InternetStatus?
+    private var lastInternetCheck: Date?
+    private var checkingInternet = false
     /// Two minutes of samples for the charts.
     nonisolated static let historyLength = 120
     private var timer: Timer?
@@ -207,6 +215,8 @@ final class SystemMonitor: ObservableObject {
             h.diskWrite = SystemMath.appending(limit: Self.historyLength, write, to: h.diskWrite)
         }
         r.cpuLevel = r.cpu == nil ? .normal : SystemMath.cpuLevel(recent: h.cpu)
+        r.internetLevel = internet.map { SystemLevel(name: $0.level) } ?? .normal
+        if lastInternetCheck.map({ now.timeIntervalSince($0) >= 60 || now < $0 }) ?? true { refreshConnections() }
         if shown.contains(.gpu) || focus == .gpu {
             lastGPU = HardwareProbe.gpu()
             r.gpu = lastGPU?.utilizationPercent
@@ -296,7 +306,24 @@ final class SystemMonitor: ObservableObject {
                            downloadBytesPerSecond: h.download, uploadBytesPerSecond: h.upload,
                            gpuPercent: h.gpu.isEmpty ? nil : h.gpu, cpuTemperatureC: h.temperature.isEmpty ? nil : h.temperature))
         system.addHardware(cache: hardware)
+        system.network.internet = internet
         return system
+    }
+
+    /// Lists connections and, when enabled, checks the internet through each one, off the main thread.
+    private func refreshConnections() {
+        guard !checkingInternet else { return }
+        checkingInternet = true
+        lastInternetCheck = Date()
+        let enabled = internetCheckEnabled
+        Task.detached(priority: .utility) {
+            let status = ConnectivityProbe.status(checkEnabled: enabled)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.checkingInternet = false
+                if status != self.internet { self.internet = status }
+            }
+        }
     }
 
     /// Reads the busiest processes off the main thread; skipped if the previous read is still running.

@@ -179,8 +179,11 @@ enum SystemStatusImage {
         for m in metrics {
             switch m {
             case .network:
-                parts.append((NSAttributedString(string: "↑ " + SystemMath.rateText(r.upload), attributes: netAttrs),
-                              NSAttributedString(string: "↓ " + SystemMath.rateText(r.download), attributes: netAttrs), netWidth))
+                // No internet (when the check is on) turns the speeds yellow or red.
+                var attrs = netAttrs
+                if colors, inkColor != nil, let c = alertColor(r.level(.network), dark: dark) { attrs[.foregroundColor] = c }
+                parts.append((NSAttributedString(string: "↑ " + SystemMath.rateText(r.upload), attributes: attrs),
+                              NSAttributedString(string: "↓ " + SystemMath.rateText(r.download), attributes: attrs), netWidth))
             default:
                 let label = NSAttributedString(string: m.label, attributes: labelAttrs)
                 var attrs = valueAttrs

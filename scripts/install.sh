@@ -197,8 +197,19 @@ rm -rf "$BACKUP"
 say ""
 say "✓ 설치가 끝났어요: $DEST/$APP (버전 $NEW_VERSION)"
 # Run the updater's reopen detached from whatever started us, then confirm the new copy is running.
+# Right after the old copy quits, macOS can still list it as running and `open` then just "activates"
+# the vanished instance, so nothing starts. Confirm the new copy is up and open it again if not.
+open_and_confirm() {
+  local attempt
+  for attempt in 1 2 3; do
+    open "$DEST/$APP" 2>/dev/null || return 1
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x "$PROC" >/dev/null 2>&1 && return 0; sleep 0.5; done
+    sleep 1
+  done
+  return 1
+}
 if [[ "${AIUSAGE_NO_OPEN:-0}" != "1" ]]; then
-  if open "$DEST/$APP"; then
+  if open_and_confirm; then
     say "  앱을 열었어요. 화면 오른쪽 위 메뉴 막대에 아이콘이 보이는지 확인해 주세요."
     say "  처음이라면 열린 안내 창에서 Claude / ChatGPT 계정을 연결해야 사용량이 표시돼요."
   else

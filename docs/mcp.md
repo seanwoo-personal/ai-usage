@@ -114,6 +114,7 @@ Results are JSON text. The disk process list is measured over one second, and th
 | Memory | under 20% free | under 10% free, or macOS reports critical pressure | Free share as macOS computes memory pressure. High usage from cache is normal |
 | Disk | 90% used or more | 95% used or more | Startup disk |
 | GPU | 70% or more | 90% or more | Current GPU utilisation |
+| Internet (`network.internet.level`) | The main connection is down but another works, a connection shows a login page, or responds in 500 ms or more | Nothing reaches the internet | Each connection tested separately (when turned on) |
 | Temperature (`sensors.level`) | 85 °C or more | 95 °C or more | Hottest CPU die sensor. Apple Silicon slows itself down near 95 °C |
 | SSD health (`drives[].level`) | 80% of rated life used, or any media error | Drive reports a critical warning, spare space below its threshold, or 100% life used | The drive's own SMART report |
 
@@ -173,6 +174,7 @@ Results are JSON text. The disk process list is measured over one second, and th
   - `system.drives`: SSD health per drive: `percentage_used` (of rated life), `available_spare_percent`, `temperature_c`, `power_on_hours`, `power_cycles`, `unsafe_shutdowns`, `media_errors`, lifetime `data_read_bytes` / `data_written_bytes`, `level`.
   - `system.volumes`: every mounted disk with `total_bytes`, `free_bytes`, `used_percent`, `file_system`, `is_internal`, `is_removable`, `is_startup`.
   - `system.wifi`: `interface`, `rssi_dbm` (signal), `noise_dbm`, `channel`, `band_ghz`, `transmit_rate_mbps`. The network name (SSID) is not included: it needs Location permission and anyone nearby can choose it.
+  - `system.network.internet` (1.7.0): `state` (`ok`, `degraded` = the main connection is down but another works, `offline`, `not_checked`), `level`, `check_enabled`, and `connections`: each wired (`ethernet`) and `wifi` connection with `name`, `interface`, `connected`, `ipv4`, `is_primary` (carries the default route), `internet` (`ok`, `no_internet`, `captive_portal` = a login page answered, `not_checked`), `latency_ms`, `checked_at`, `level`. The check runs every minute only when turned on in Settings.
   - `system.battery` (laptops): `percent`, `charging`, `plugged_in`, `minutes_remaining`, `cycle_count`, `health_percent`, `temperature_c`.
 - `schema_version` changes only when an existing field changes meaning or name. New fields may appear within the same version.
 </details>
@@ -207,6 +209,7 @@ ssh m1 "'/Applications/AI Usage.app/Contents/MacOS/AIUsage' status"
 - **Nothing listens.** The MCP server runs only while an AI tool's SSH session is open and exits when it ends.
 - **Read-only.** All three tools only read.
 - **No secrets.** The status file and results never contain tokens, cookies, passwords, e-mail addresses or account IDs (only the one-way `account_key`). The file is readable by your account only (mode 0600).
+- **Internet check** (off by default): when turned on, every minute each connection fetches Apple's connectivity page (`captive.apple.com`, the server macOS itself uses for the same purpose). Nothing else is sent.
 - **Temperatures, fans and power** use private but long-stable macOS interfaces (the same ones Stats uses). They only read; no admin rights or helper tool. If a macOS update changes them, those values are just missing.
 - **Names are untrusted.** Any program chooses its own process name, and whoever names a USB drive or device chooses those names, so they are cut to one line, stripped of invisible characters and limited to 64 characters, and AI clients are told that reported text is data, never instructions.
 - Don't want the file? Turn status saving off in Settings; the saved file is deleted too.

@@ -112,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Shows, updates or removes the system items, and runs the monitor only while one is shown.
     private func updateSystemItem() {
         let metrics = settings.showSystem ? settings.orderedSystemMetrics : []
+        monitor.internetCheckEnabled = settings.internetCheck
         for (m, item) in systemItems where !metrics.contains(m) {
             if detailMetric == m { detailPopover.performClose(nil) }
             if let b = item.button { shownImageKeys[ObjectIdentifier(b)] = nil }
@@ -139,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for (m, item) in systemItems {
             let key: String
             switch m {
-            case .network: key = SystemMath.rateText(r.upload) + SystemMath.rateText(r.download)
+            case .network: key = SystemMath.rateText(r.upload) + SystemMath.rateText(r.download) + "\(r.internetLevel)"
             default: key = m.valueText(r) + "\(r.level(m))"
             }
             setImage(item.button, key: key + "\(settings.systemColors)") {
@@ -267,6 +268,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-details"), i + 1 < Com
     MainActor.assumeIsolated {
         _ = NSApplication.shared
         let monitor = SystemMonitor()
+        monitor.internetCheckEnabled = true
         monitor.start()
         for metric in SystemStatusImage.Metric.allCases {
             monitor.focus = metric

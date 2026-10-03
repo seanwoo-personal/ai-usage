@@ -14,6 +14,7 @@ This directory owns the macOS app. Start at [main.swift](AIUsage/main.swift), wh
 | Menu / copy | [PopoverView.swift](AIUsage/PopoverView.swift), [StatusImage.swift](AIUsage/StatusImage.swift), [L10n.swift](AIUsage/L10n.swift) | SelfTest; both-language visual check |
 | System status (CPU · RAM · SSD · network) | [SystemMonitor.swift](AIUsage/SystemMonitor.swift), [SystemDetails.swift](AIUsage/SystemDetails.swift), [SystemDetailView.swift](AIUsage/SystemDetailView.swift) | SystemTests, crash probes; `--render-details <dir>` off-screen check |
 | Hardware readings (cores, GPU, sensors, fans, power, SSD health, volumes, Wi-Fi, battery, network processes) | [Hardware.swift](AIUsage/Hardware.swift) | HardwareTests, crash probes; `status --live` and `--render-details` on real Macs |
+| Internet check per connection | [Connectivity.swift](AIUsage/Connectivity.swift) | ConnectivityTests (no network); `status --live` with the setting on, on Macs with LAN only, Wi-Fi only and both |
 | Saved status, `status`/`top`/`mcp` commands | [StatusSnapshot.swift](AIUsage/StatusSnapshot.swift), [StatusCLI.swift](AIUsage/StatusCLI.swift) | StatusTests (schema, file mode, MCP protocol); real MCP session over SSH; keep [MCP guide](../docs/mcp.md) in sync |
 | Update / startup | [Updater.swift](AIUsage/Updater.swift), [LoginItem.swift](AIUsage/LoginItem.swift) | UpdaterTests, installer tests, startup checks |
 

@@ -226,6 +226,16 @@ struct SystemDetailView: View {
 
     // MARK: Network
 
+    static func connectionText(_ c: ConnectionStatus, checkEnabled: Bool) -> String {
+        guard c.connected else { return L.t("연결 안 됨", "Not connected") }
+        switch c.internet {
+        case "ok": return L.t("인터넷 정상", "Online") + (c.latencyMs.map { String(format: " · %.0f ms", $0) } ?? "")
+        case "no_internet": return L.t("인터넷 안 됨", "No internet")
+        case "captive_portal": return L.t("로그인 필요", "Login page")
+        default: return checkEnabled ? L.t("확인 중…", "Checking…") : L.t("연결됨", "Connected")
+        }
+    }
+
     private var network: some View {
         let d = monitor.details
         let r = monitor.reading
@@ -243,6 +253,19 @@ struct SystemDetailView: View {
                 Row(L.t("내부 IP", "Local IP"), d.localIP ?? "–")
                 Row(L.t("부팅 후 받음", "Received since startup"), SystemMath.bytesText(d.netReceivedTotal.map { Double($0) }))
                 Row(L.t("부팅 후 보냄", "Sent since startup"), SystemMath.bytesText(d.netSentTotal.map { Double($0) }))
+            }
+            if let net = monitor.internet, !net.connections.isEmpty {
+                Section(L.t("인터넷 연결", "Internet")) {
+                    ForEach(net.connections, id: \.interface) { c in
+                        Row(c.name + (c.isPrimary && net.connections.filter(\.connected).count > 1 ? L.t(" (주 연결)", " (main)") : ""),
+                            Self.connectionText(c, checkEnabled: net.checkEnabled), valueColor: LevelColor.color(SystemLevel(name: c.level)))
+                    }
+                    if !net.checkEnabled {
+                        Text(L.t("설정에서 \"인터넷 연결 확인\"을 켜면 연결마다 인터넷이 되는지와 응답 속도를 확인해요.",
+                                 "Turn on \"Check internet connection\" in Settings to test each connection and its response time."))
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                }
             }
             if let w = d.wifi {
                 Section("Wi-Fi") {

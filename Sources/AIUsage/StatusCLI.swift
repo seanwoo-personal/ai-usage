@@ -53,6 +53,8 @@ enum StatusCLI {
                               measure: () -> StatusSnapshot.SystemStatus = {
                                   var s = StatusSnapshot.system(from: StatusSnapshot.measure())
                                   s.addHardware(cache: HardwareCache())
+                                  s.network.internet = ConnectivityProbe.status(
+                                      checkEnabled: UserDefaults.standard.bool(forKey: AppSettings.internetCheckKey))
                                   return s
                               },
                               host: () -> StatusSnapshot.HostInfo = SystemProbe.host) -> StatusSnapshot {
@@ -123,6 +125,12 @@ enum StatusCLI {
             },
             sys.drives.map { d in d.map { "SSD     \($0.level)   \($0.percentageUsed.map { "\($0)% life used" } ?? "")   \($0.powerOnHours) h" }.joined(separator: "\n") },
             sys.battery.map { b in "Battery \(b.percent.map { "\($0)%" } ?? "–")   \(b.charging ? "charging" : b.pluggedIn ? "plugged in" : "on battery")" },
+            sys.network.internet.map { n in
+                "Internet \(n.state)\(flag(n.level))   " + n.connections.map { c in
+                    "\(c.name) " + (!c.connected ? "not connected" : c.internet == "ok" ? "ok \(c.latencyMs.map { String(format: "%.0f ms", $0) } ?? "")"
+                                    : c.internet.replacingOccurrences(of: "_", with: " ")) + (c.isPrimary ? " (main)" : "")
+                }.joined(separator: " · ")
+            },
             "Network ↓ \(SystemMath.rateText(sys.network.downloadBytesPerSecond))  ↑ \(SystemMath.rateText(sys.network.uploadBytesPerSecond))"
                 + (sys.network.interface.map { "   \($0)" } ?? "") + (sys.network.localIp.map { " \($0)" } ?? ""),
         ]

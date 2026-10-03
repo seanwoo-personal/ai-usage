@@ -115,6 +115,8 @@ struct StatusSnapshot: Codable, Equatable {
         var sentSinceBootBytes: UInt64?
         var interface: String?
         var localIp: String?
+        /// Wired and Wi-Fi connections and whether each reaches the internet (added in 1.7.0).
+        var internet: InternetStatus? = nil
     }
 
     struct History: Codable, Equatable {
