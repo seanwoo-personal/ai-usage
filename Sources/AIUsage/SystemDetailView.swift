@@ -114,6 +114,7 @@ struct SystemDetailView: View {
                 Row(L.t("쓰기", "Write"), SystemMath.rateText(monitor.diskWrite), dot: .red)
             }
             Section(L.t("정보", "Details")) {
+                Row(L.t("전체 용량", "Total capacity"), SystemMath.bytesText(d.diskTotal.map { Double($0) }))
                 Row(L.t("여유 공간", "Available"), SystemMath.bytesText(d.diskFree.map { Double($0) }))
                 Row(L.t("부팅 후 읽음", "Read since startup"), SystemMath.bytesText(d.diskReadTotal.map { Double($0) }))
                 Row(L.t("부팅 후 씀", "Written since startup"), SystemMath.bytesText(d.diskWriteTotal.map { Double($0) }))
@@ -134,10 +135,14 @@ struct SystemDetailView: View {
                         "\(SystemMath.bytesText(Double(h.dataReadBytes))) · \(SystemMath.bytesText(Double(h.dataWrittenBytes)))")
                 }
             }
-            if d.volumes.count > 1 {
+            if !d.volumes.isEmpty {
                 Section(L.t("연결된 디스크", "Volumes")) {
                     ForEach(Array(d.volumes.enumerated()), id: \.offset) { _, v in
-                        Row(v.name, "\(SystemMath.percentText(v.usedPercent)) · " + L.t("\(SystemMath.bytesText(Double(v.freeBytes))) 남음", "\(SystemMath.bytesText(Double(v.freeBytes))) free"))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Row(v.name, SystemMath.percentText(v.usedPercent))
+                            Row(L.t("전체 용량", "Total capacity"), SystemMath.bytesText(Double(v.totalBytes)))
+                            Row(L.t("여유 공간", "Available"), SystemMath.bytesText(Double(v.freeBytes)))
+                        }
                     }
                 }
             }

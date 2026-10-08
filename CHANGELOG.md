@@ -5,6 +5,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-10-08
+
+### Changed
+- Disk details now show total capacity for the startup disk and every mounted volume, including external drives.
+
 ## [1.7.3] - 2026-10-04
 
 ### Fixed
@@ -187,7 +192,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - First public release: menu bar usage for Claude and Codex, web or CLI login, first-run guide, one-line installer.
 
-[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.3...HEAD
+[Unreleased]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.4...HEAD
+[1.7.4]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/seanwoo-personal/ai-usage/compare/v1.7.0...v1.7.1
